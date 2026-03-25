@@ -1,0 +1,672 @@
+/* ============================================================
+   PAUL'S JOURNEYS — 3D RPG Stylesheet
+   Three.js top-down RPG — Jerusalem 34 AD
+   ============================================================ */
+
+/* ── RESET & BASE ─────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  background: #0a0804;
+  font-family: 'Crimson Text', Georgia, serif;
+  color: #f0e0b0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── CANVAS ───────────────────────────────────────────────── */
+#game-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── HUD ──────────────────────────────────────────────────── */
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 16px;
+  pointer-events: none;
+}
+
+/* Location tag */
+#location-tag {
+  background: rgba(10, 6, 2, 0.82);
+  border: 1.5px solid rgba(201, 168, 76, 0.6);
+  border-radius: 6px;
+  padding: 6px 14px 5px 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+
+#location-name {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #c9a84c;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(201, 168, 76, 0.5);
+}
+
+#scripture-ref {
+  font-family: 'Crimson Text', Georgia, serif;
+  font-style: italic;
+  font-size: 0.75rem;
+  color: #a07830;
+  opacity: 0.9;
+  margin-top: 1px;
+}
+
+/* Quest box */
+#quest-box {
+  background: rgba(10, 6, 2, 0.82);
+  border: 1.5px solid rgba(201, 168, 76, 0.6);
+  border-radius: 6px;
+  padding: 6px 14px 5px 14px;
+  max-width: 200px;
+  text-align: right;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+
+#quest-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #c9a84c;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  opacity: 0.85;
+}
+
+#quest-text {
+  font-family: 'Crimson Text', Georgia, serif;
+  font-style: italic;
+  font-size: 0.82rem;
+  color: #e0d0a0;
+  line-height: 1.35;
+}
+
+/* HUD right column */
+#hud-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Satchel button */
+#satchel-btn {
+  background: rgba(10, 6, 2, 0.85);
+  border: 1.5px solid rgba(201, 168, 76, 0.6);
+  border-radius: 8px;
+  padding: 5px 12px 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  pointer-events: all;
+  color: #c9a84c;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  transition: border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+#satchel-btn:active { border-color: #c9a84c; }
+
+#satchel-bag-icon {
+  font-size: 1.1rem;
+}
+#satchel-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+}
+#satchel-badge {
+  background: #c9a84c;
+  color: #0a0602;
+  font-family: 'Cinzel', serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Satchel popup overlay */
+#satchel-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+#satchel-popup-inner {
+  background: rgba(8,5,1,0.97);
+  border: 2px solid #c9a84c;
+  border-radius: 16px;
+  padding: 24px 28px 20px;
+  min-width: 280px;
+  max-width: 340px;
+  box-shadow: 0 0 40px rgba(0,0,0,0.8), 0 0 16px rgba(201,168,76,0.2);
+}
+#satchel-popup-title {
+  font-family: 'Cinzel', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #c9a84c;
+  letter-spacing: 0.1em;
+  text-align: center;
+  margin-bottom: 18px;
+  text-shadow: 0 0 8px rgba(201,168,76,0.4);
+}
+#satchel-popup-items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.spi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(201,168,76,0.06);
+  border: 1px solid rgba(201,168,76,0.15);
+  transition: opacity 0.2s;
+}
+.spi-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  width: 32px;
+  text-align: center;
+}
+.spi-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.78rem;
+  color: #c9a84c;
+  letter-spacing: 0.04em;
+}
+.spi-desc {
+  font-family: 'Crimson Text', Georgia, serif;
+  font-size: 0.82rem;
+  color: #a09060;
+  margin-top: 1px;
+}
+#satchel-popup-close {
+  display: block;
+  width: 100%;
+  padding: 9px;
+  background: rgba(201,168,76,0.12);
+  border: 1.5px solid rgba(201,168,76,0.5);
+  border-radius: 8px;
+  color: #c9a84c;
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+#satchel-popup-close:active { background: rgba(201,168,76,0.25); }
+
+/* ── INTERACT PROMPT ──────────────────────────────────────── */
+#interact-prompt {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid #c9a84c;
+  color: #c9a84c;
+  font-family: 'Cinzel', serif;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+}
+
+/* ── DIALOGUE BOX ─────────────────────────────────────────── */
+#dialogue-box {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  padding: 12px 16px 20px;
+  cursor: pointer;
+}
+
+#dialogue-inner {
+  background: rgba(8, 6, 2, 0.95);
+  border: 2px solid #c9a84c;
+  border-radius: 14px;
+  padding: 14px 18px 12px 18px;
+  max-width: 640px;
+  margin: 0 auto;
+  box-shadow: 0 0 30px rgba(0,0,0,0.7), 0 0 12px rgba(201,168,76,0.2);
+}
+
+#dialogue-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+
+#dialogue-icon {
+  color: #c9a84c;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+#dialogue-speaker {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #c9a84c;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 6px rgba(201,168,76,0.4);
+}
+
+#dialogue-text {
+  font-family: 'Crimson Text', Georgia, serif;
+  font-size: 1.05rem;
+  color: #f5ecd0;
+  line-height: 1.6;
+  min-height: 4em;
+}
+
+#dialogue-prompt {
+  font-family: 'Crimson Text', Georgia, serif;
+  font-size: 0.8rem;
+  color: #8a6820;
+  text-align: right;
+  margin-top: 8px;
+  animation: blink 1.3s ease-in-out infinite;
+}
+
+/* ── NOTIFICATION ─────────────────────────────────────────── */
+#notification {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  background: rgba(8, 6, 2, 0.95);
+  border: 2px solid #c9a84c;
+  border-radius: 12px;
+  padding: 24px 32px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 40px rgba(0,0,0,0.8), 0 0 20px rgba(201,168,76,0.25);
+  min-width: 200px;
+}
+
+#notification:not(.hidden) {
+  animation: notifAnim 3.5s ease forwards;
+}
+
+#notif-icon {
+  font-size: 2rem;
+  margin-bottom: 8px;
+}
+
+#notif-text {
+  font-family: 'Cinzel', serif;
+  font-size: 0.95rem;
+  color: #c9a84c;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+/* ── MOBILE CONTROLS ──────────────────────────────────────── */
+#mobile-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+
+/* Joystick — bottom-right, spawn-on-touch */
+#joystick-zone {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 55vw;
+  height: 60vh;
+  z-index: 15;
+  pointer-events: all;
+}
+
+#joystick-base {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: rgba(201, 168, 76, 0.15);
+  border: 2px solid rgba(201, 168, 76, 0.5);
+  opacity: 0;
+  transition: opacity 0.1s;
+  pointer-events: none;
+}
+
+#joystick-thumb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(201, 168, 76, 0.8);
+  border: 2px solid #c9a84c;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.4);
+  pointer-events: none;
+}
+
+#action-buttons {
+  position: fixed;
+  bottom: 28px;
+  left: 16px;
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
+  align-items: flex-end;
+  pointer-events: none;
+  z-index: 16;
+}
+
+#jump-btn {
+  pointer-events: all;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: rgba(100, 160, 201, 0.2);
+  border: 2px solid rgba(100, 180, 220, 0.8);
+  color: rgba(150, 210, 240, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  gap: 1px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 0 10px rgba(100, 180, 220, 0.2);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+#jump-btn:active {
+  transform: scale(0.9);
+  box-shadow: 0 0 18px rgba(100, 180, 220, 0.5);
+}
+
+#jump-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+#jump-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+}
+
+#interact-btn {
+  pointer-events: all;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(201, 168, 76, 0.2);
+  border: 2px solid #c9a84c;
+  color: #c9a84c;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  gap: 2px;
+  outline: none;
+  z-index: 15;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.2);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+
+#interact-btn:active {
+  transform: scale(0.92);
+  box-shadow: 0 0 20px rgba(201, 168, 76, 0.5);
+}
+
+#btn-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+#btn-label {
+  font-family: 'Cinzel', serif;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+}
+
+/* Mobile controls: hidden by default */
+#mobile-controls  { display: none !important; }
+#action-buttons   { display: none !important; }
+#joystick-zone    { display: none !important; }
+
+/* Show on real touch devices (JS detection) */
+body.touch-device #mobile-controls { display: block !important; }
+body.touch-device #action-buttons  { display: flex  !important; }
+body.touch-device #joystick-zone   { display: block !important; }
+body.touch-device #interact-prompt { display: none  !important; }
+
+/* Show on narrow viewports (phones + mobile preview emulation) */
+@media (max-width: 768px) {
+  #mobile-controls { display: block !important; }
+  #action-buttons  { display: flex  !important; }
+  #joystick-zone   { display: block !important; }
+  #interact-prompt { display: none  !important; }
+}
+
+/* ── HUD CENTER GROUP ─────────────────────────────────────── */
+#hud-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+/* ── SHEKEL HUD ───────────────────────────────────────────── */
+#shekel-hud {
+  background: rgba(10, 6, 2, 0.82);
+  border: 1.5px solid rgba(201, 168, 76, 0.6);
+  border-radius: 6px;
+  padding: 6px 12px 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+
+/* ── COMPASS ──────────────────────────────────────────────── */
+#compass {
+  pointer-events: none;
+}
+
+#compass-face {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(8, 5, 1, 0.88);
+  border: 1.5px solid rgba(201, 168, 76, 0.55);
+  position: relative;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5), inset 0 0 8px rgba(0,0,0,0.4);
+}
+
+.cdir {
+  position: absolute;
+  font-family: 'Cinzel', serif;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #c9a84c;
+}
+.cn { top: 4px;    left: 50%; transform: translateX(-50%); color: #e8604a; }
+.cs { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.ce { right: 5px;  top: 50%;  transform: translateY(-50%); }
+.cw { left: 5px;   top: 50%;  transform: translateY(-50%); }
+
+/* Needle — red north tip, gold south */
+#compass-needle-n {
+  position: absolute;
+  left: 50%;
+  bottom: calc(50% + 1px);
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 13px solid #e8604a;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
+  filter: drop-shadow(0 0 3px rgba(232, 96, 74, 0.5));
+}
+#compass-needle-s {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 1px);
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 13px solid rgba(201, 168, 76, 0.55);
+  transform: translateX(-50%);
+  transform-origin: top center;
+}
+
+#shekel-icon {
+  font-size: 0.85rem;
+  color: #c9a84c;
+}
+
+#shekel-count {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #c9a84c;
+}
+
+#shekel-label {
+  font-family: 'Crimson Text', Georgia, serif;
+  font-size: 0.75rem;
+  color: #a07830;
+  margin-top: 1px;
+}
+
+
+/* ── QUEST ARROW HINT ─────────────────────────────────────── */
+#quest-arrow {
+  position: fixed;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 15;
+  pointer-events: none;
+  animation: bounceArrow 1.4s ease-in-out infinite;
+}
+
+#qa-arrow {
+  color: #c9a84c;
+  font-size: 1.6rem;
+  line-height: 1;
+  text-shadow: 0 0 12px rgba(201,168,76,0.8), 0 2px 6px rgba(0,0,0,0.7);
+}
+
+#qa-text {
+  color: #f0d890;
+  font-family: 'Cinzel', serif;
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  white-space: nowrap;
+}
+
+
+/* ── ANIMATIONS ───────────────────────────────────────────── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@keyframes notifAnim {
+  0%   { opacity: 0; transform: translate(-50%, calc(-50% - 20px)); }
+  15%  { opacity: 1; transform: translate(-50%, -50%); }
+  80%  { opacity: 1; transform: translate(-50%, -50%); }
+  100% { opacity: 0; transform: translate(-50%, -50%); }
+}
+
+@keyframes bounceArrow {
+  0%, 100% { transform: translateX(-50%) translateY(0px); }
+  50%       { transform: translateX(-50%) translateY(-9px); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.55; }
+  50%       { opacity: 1; }
+}
+
+/* ── BLIND OVERLAY (Paul's blindness after encounter) ──── */
+#blind-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 28;
+  background: radial-gradient(ellipse at center,
+    rgba(255,255,245,0.82) 0%,
+    rgba(255,255,240,0.92) 50%,
+    rgba(255,255,250,0.98) 100%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.8s ease;
+}
+#blind-overlay.active {
+  opacity: 1;
+}
+
+/* ── UTILITY ──────────────────────────────────────────────── */
+.hidden {
+  display: none !important;
+}

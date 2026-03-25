@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Paul's Journeys — A Biblical RPG</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link href="style.css" rel="stylesheet">
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="location-tag">
+      <div id="location-name">Jerusalem</div>
+      <div id="scripture-ref">Acts 9:1</div>
+    </div>
+    <div id="hud-center">
+      <div id="shekel-hud">
+        <span id="shekel-icon">&#9675;</span>
+        <span id="shekel-count">5</span>
+        <span id="shekel-label">shekels</span>
+      </div>
+      <div id="compass" aria-label="Compass">
+        <div id="compass-face">
+          <div class="cdir cn">N</div>
+          <div class="cdir ce">E</div>
+          <div class="cdir cs">S</div>
+          <div class="cdir cw">W</div>
+          <div id="compass-needle-n"></div>
+          <div id="compass-needle-s"></div>
+        </div>
+      </div>
+    </div>
+    <div id="hud-right">
+      <div id="quest-box">
+        <div id="quest-label">QUEST</div>
+        <div id="quest-text">Find the High Priest in the Temple</div>
+      </div>
+      <button id="satchel-btn" class="hidden">
+        <span id="satchel-bag-icon">&#127890;</span>
+        <span id="satchel-label">Satchel</span>
+        <span id="satchel-badge">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Interact prompt (desktop) -->
+  <div id="interact-prompt" class="hidden">[E] Talk</div>
+
+  <!-- Quest arrow hint (shown at game start) -->
+  <div id="quest-arrow" class="hidden">
+    <div id="qa-arrow">&#9650;</div>
+    <div id="qa-text">Head North &mdash; Find the High Priest</div>
+  </div>
+
+  <!-- Satchel popup -->
+  <div id="satchel-popup" class="hidden">
+    <div id="satchel-popup-inner">
+      <div id="satchel-popup-title">&#127868; Satchel</div>
+      <div id="satchel-popup-items">
+        <div class="spi" id="sp-letters">
+          <span class="spi-icon">&#128220;</span>
+          <div class="spi-info">
+            <div class="spi-name">Letters of Passage</div>
+            <div class="spi-desc">Sealed by Caiaphas, High Priest</div>
+          </div>
+        </div>
+        <div class="spi" id="sp-cloth">
+          <span class="spi-icon">&#129525;</span>
+          <div class="spi-info">
+            <div class="spi-name">Tent Cloth</div>
+            <div class="spi-desc">Bolts: <span id="sp-cloth-count">0</span></div>
+          </div>
+        </div>
+        <div class="spi" id="sp-tents">
+          <span class="spi-icon">&#9978;</span>
+          <div class="spi-info">
+            <div class="spi-name">Woven Tents</div>
+            <div class="spi-desc">Ready to sell: <span id="sp-tent-count">0</span></div>
+          </div>
+        </div>
+        <div class="spi" id="sp-shekels-row">
+          <span class="spi-icon">&#9711;</span>
+          <div class="spi-info">
+            <div class="spi-name">Shekels</div>
+            <div class="spi-desc"><span id="sp-shekels">5</span> coins</div>
+          </div>
+        </div>
+      </div>
+      <button id="satchel-popup-close">Close</button>
+    </div>
+  </div>
+
+  <!-- Dialogue box -->
+  <div id="dialogue-box" class="hidden">
+    <div id="dialogue-inner">
+      <div id="dialogue-header">
+        <span id="dialogue-icon">&#10022;</span>
+        <span id="dialogue-speaker"></span>
+      </div>
+      <div id="dialogue-text"></div>
+      <div id="dialogue-prompt">&#9660; Tap to continue</div>
+    </div>
+  </div>
+
+  <!-- Notification popup -->
+  <div id="notification" class="hidden">
+    <div id="notif-icon">&#128220;</div>
+    <div id="notif-text"></div>
+  </div>
+
+  <!-- Mobile controls -->
+  <div id="mobile-controls">
+    <!-- Action buttons — bottom LEFT -->
+    <div id="action-buttons">
+      <button id="jump-btn">
+        <span id="jump-icon">&#8679;</span>
+        <span id="jump-label">Jump</span>
+      </button>
+      <button id="interact-btn">
+        <span id="btn-icon">&#9889;</span>
+        <span id="btn-label">Talk</span>
+      </button>
+    </div>
+    <!-- Joystick — right half of screen -->
+    <div id="joystick-zone">
+      <div id="joystick-base">
+        <div id="joystick-thumb"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blind overlay (Paul's blindness on the Damascus road) -->
+  <div id="blind-overlay"></div>
+
+  <script src="scenes.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
