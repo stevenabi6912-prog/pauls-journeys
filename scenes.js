@@ -98,7 +98,7 @@ var WORLD = {
 
     // ── Extended market stall workers ───────────────────────
     {
-      id: 'worker_weaver', name: 'Weaver', x: -5, z: 16.8,
+      id: 'worker_weaver', name: 'Weaver', x: 10, z: 18,
       bodyColor: 0x5a4a8a, accentColor: 0x8a7aaa, headColor: 0xb07840,
       dialogues: [
         { speaker: 'Weaver', text: '"I weave cloth from the finest wool of Judea and linen from Egypt. Each thread placed with care."' },
@@ -279,6 +279,131 @@ var WORLD = {
       ],
       onComplete: 'buy_horses',
     },
+
+    // ── Roman Soldiers (patrolling) ──────────────────────────
+    {
+      id: 'roman_1', name: 'Roman Soldier',
+      x: 2.8, z: 12,
+      isRomanSoldier: true,
+      bodyColor: 0x7a1818, accentColor: 0xd4a830, headColor: 0xb07840,
+      patrol: [2.8, 8, 2.8, 22],
+      dialogues: [
+        { speaker: 'Roman Soldier', text: '"Move along, citizen. These streets are under Roman authority. Rome keeps the peace \u2014 and we intend to keep it."' },
+        { speaker: 'Roman Soldier', text: '"The Pax Romana holds in Jerusalem. Cause no trouble and you have nothing to fear from us."' },
+      ],
+      onComplete: null,
+    },
+    {
+      id: 'roman_2', name: 'Roman Soldier',
+      x: -12, z: 20,
+      isRomanSoldier: true,
+      bodyColor: 0x7a1818, accentColor: 0xd4a830, headColor: 0xb07840,
+      patrol: [-12, 14, -12, 30],
+      dialogues: [
+        { speaker: 'Roman Soldier', text: '"Halt. State your business in this quarter."' },
+        { speaker: 'Roman Soldier', text: '"We watch this district carefully. The Sanhedrin and Rome share an interest in order. Go about your business."' },
+      ],
+      onComplete: null,
+    },
+    {
+      id: 'roman_3', name: 'Roman Soldier',
+      x: 13, z: 36,
+      isRomanSoldier: true,
+      bodyColor: 0x7a1818, accentColor: 0xd4a830, headColor: 0xb07840,
+      patrol: [13, 28, 13, 44],
+      dialogues: [
+        { speaker: 'Roman Soldier', text: '"Damascus road, is it? Long journey. Keep to Caesar\u2019s roads and you will arrive safely enough."' },
+        { speaker: 'Roman Soldier', text: '"We have little love for these Jewish sectarians \u2014 if they cause trouble, the empire will deal with them eventually."' },
+      ],
+      onComplete: null,
+    },
+
+    // ── Ambient Townspeople ──────────────────────────────────
+    {
+      id: 'townsfolk_1', name: 'Townsman',
+      x: -10, z: 8,
+      bodyColor: 0x6a5040, accentColor: 0x9a7860, headColor: 0xb07840,
+      dialogues: [
+        { speaker: 'Townsman', text: '"Did you hear? Saul dragged away three families from the lower city last week. Men and women both, bound in chains."' },
+        { speaker: 'Townsman', text: '"\"As for Saul, he made havoc of the church, entering into every house.\" \u2014 Acts 8:3. God have mercy on them."' },
+      ],
+      onComplete: null,
+    },
+    {
+      id: 'townsfolk_2', name: 'Townswoman',
+      x: 10, z: 10,
+      bodyColor: 0xa05060, accentColor: 0xd08090, headColor: 0xb07840,
+      dialogues: [
+        { speaker: 'Townswoman', text: '"My neighbor was taken in the night. Her only crime was praying in Jesus\u2019 name. I fear for my own family now."' },
+        { speaker: 'Townswoman', text: '"The believers scattered from Jerusalem since Stephen was stoned. Judea, Samaria \u2014 they carry the news everywhere they go."' },
+      ],
+      onComplete: null,
+    },
+    {
+      id: 'townsfolk_3', name: 'Elder',
+      x: -8, z: 30,
+      bodyColor: 0x7a6a50, accentColor: 0xaaa080, headColor: 0xd0b090,
+      dialogues: [
+        { speaker: 'Elder', text: '"I remember Stephen\u2019s face as they stoned him. He looked\u2026 peaceful. He said he saw heaven opened and Jesus standing at the right hand of God."' },
+        { speaker: 'Elder', text: '"Whether he was right or wrong, no man should die for his beliefs. These are very troubled times in Jerusalem."' },
+      ],
+      onComplete: null,
+    },
+    {
+      id: 'townsfolk_4', name: 'Young Merchant',
+      x: 16, z: 22,
+      bodyColor: 0x605040, accentColor: 0x908060, headColor: 0xb07840,
+      dialogues: [
+        { speaker: 'Young Merchant', text: '"Business has been terrible. Half my customers have fled Jerusalem since the persecution started."' },
+        { speaker: 'Young Merchant', text: '"I heard a group even went as far as Antioch \u2014 preaching to Greeks! Can you imagine? The whole world is changing."' },
+      ],
+      onComplete: null,
+    },
+    {
+      id: 'townsfolk_5', name: 'Shepherd',
+      x: 3, z: 38,
+      bodyColor: 0x7a6040, accentColor: 0xa08060, headColor: 0xb07840,
+      dialogues: [
+        { speaker: 'Shepherd', text: '"I drive my flock through here each morning. Used to be such a peaceful city \u2014 everyone knew their neighbor."' },
+        { speaker: 'Shepherd', text: '"\"The LORD is my shepherd; I shall not want.\" \u2014 Psalm 23:1. That is enough for me. I trust Him with the rest."' },
+      ],
+      onComplete: null,
+    },
+
+    // ── Sanhedrin Elder (dramatic irony near temple) ─────────
+    {
+      id: 'sanhedrin_elder', name: 'Sanhedrin Elder',
+      x: 5, z: -6,
+      bodyColor: 0x2a3a6a, accentColor: 0x5a6aaa, headColor: 0xd0b090,
+      dialogues: [
+        { speaker: 'Elder of the Sanhedrin', text: '"Saul! The name of God is blessed for raising up a man of your zeal. You are a fire in this cold generation."' },
+        { speaker: 'Elder of the Sanhedrin', text: '"These followers of The Way are a cancer in the body of Israel. What you do in Damascus \u2014 it is the will of the Almighty."' },
+        { speaker: 'Elder of the Sanhedrin', text: '"Go with our full blessing. Root out every last one of them and bring them back in chains. History will remember your faithfulness."' },
+      ],
+      onComplete: null,
+    },
+
+    // ── Hidden Believers (optional moral choice encounters) ──
+    {
+      id: 'believer_1', name: 'Hidden Follower',
+      x: -22, z: 16,
+      bodyColor: 0x506040, accentColor: 0x708060, headColor: 0xb07840,
+      dialogues: [
+        { speaker: 'Follower', text: 'A man sees you coming and freezes, clutching a small scroll to his chest. His eyes fill with fear.' },
+        { speaker: 'Follower', text: '"Please\u2026 I have a family. I have done nothing but pray and break bread with friends. We follow The Way."' },
+      ],
+      onComplete: 'believer_choice',
+    },
+    {
+      id: 'believer_2', name: 'Hidden Follower',
+      x: 24, z: 33,
+      bodyColor: 0x5a6050, accentColor: 0x8a9080, headColor: 0xb07840,
+      dialogues: [
+        { speaker: 'Follower', text: 'A woman presses against the wall as you approach, eyes wide. She has been hiding here, clutching a child\u2019s hand.' },
+        { speaker: 'Follower', text: '"I follow The Way. I know what that means to you. Do what you must\u2026 but know that Jesus is risen. I will not deny it."' },
+      ],
+      onComplete: 'believer_choice',
+    },
   ],
 
   // ────────────────────────────────────────────────────────
@@ -372,9 +497,8 @@ var WORLD = {
     { x: 0,   z: 5,    w: 65,  d: 2.5, color: 0x9a8870, y: 0.065 },  // upper E-W
     { x: 0,   z: 22,   w: 65,  d: 2.5, color: 0x9a8870, y: 0.065 },  // central E-W
     { x: 0,   z: 38,   w: 45,  d: 2.5, color: 0x9a8870, y: 0.065 },  // southern E-W
-    { x: -14, z: 28,   w: 2.5, d: 30,  color: 0x8a7860, y: 0.10 },   // west alley
-    { x:  14, z: 28,   w: 2.5, d: 30,  color: 0x8a7860, y: 0.10 },   // east alley
-    { x:  14, z: 44,   w: 2.5, d: 14,  color: 0x8a7860, y: 0.10 },   // stable approach
+    { x: -14, z: 28,   w: 2.5, d: 46,  color: 0x8a7860, y: 0.10 },   // west alley (z:5–51)
+    { x:  14, z: 28,   w: 2.5, d: 46,  color: 0x8a7860, y: 0.10 },   // east alley (z:5–51)
     { x: 0,   z: -15.5, w: 10,  d: 5,  color: 0xd8d0a0, y: 0.065 },  // temple courtyard
   ],
 
@@ -395,14 +519,14 @@ var WORLD = {
   stalls: [
     { x: -7, z: 3,  color: 0xc03020 },
     { x: -4, z: 3,  color: 0x9030a0 },
-    { x:  4, z: 7,  color: 0x2060c0 },
+    { x:  4, z: 7,  color: 0xb04820 },
     { x:  7, z: 7,  color: 0xe06010 },
     { x: -7, z: 7,  color: 0xe07020 },
     { x:  7, z: 3,  color: 0xb02030 },
     { x: -5, z: 18, color: 0x40a060 },
     { x:  5, z: 18, color: 0x8040c0 },
     { x: -8, z: 15, color: 0xd04030 },
-    { x:  8, z: 15, color: 0x2080c0 },
+    { x:  8, z: 15, color: 0xc06830 },
   ],
 
   decorations: [
@@ -412,14 +536,14 @@ var WORLD = {
     { type: 'pot',  x:  1.5, z:  18 },
     { type: 'pot',  x: -1.5, z:  30 },
     { type: 'pot',  x:  1.5, z:  30 },
-    { type: 'lamp', x: -2,   z:  0 },
-    { type: 'lamp', x:  2,   z:  0 },
-    { type: 'lamp', x: -2,   z:  9 },
-    { type: 'lamp', x:  2,   z:  9 },
-    { type: 'lamp', x: -2,   z: 22 },
-    { type: 'lamp', x:  2,   z: 22 },
-    { type: 'lamp', x: -2,   z: 38 },
-    { type: 'lamp', x:  2,   z: 38 },
+    { type: 'lamp', x: -3.5, z:  0 },
+    { type: 'lamp', x:  3.5, z:  0 },
+    { type: 'lamp', x: -3.5, z:  9 },
+    { type: 'lamp', x:  3.5, z:  9 },
+    { type: 'lamp', x: -3.5, z: 22 },
+    { type: 'lamp', x:  3.5, z: 22 },
+    { type: 'lamp', x: -3.5, z: 38 },
+    { type: 'lamp', x:  3.5, z: 38 },
   ],
 
   signs: [
@@ -488,14 +612,14 @@ var WORLD = {
     { minX:  7,  maxX:  9,  minZ: 14.4, maxZ: 15.6 },
 
     // ── Lamp posts ──────────────────────────────────────────
-    { minX: -2.15, maxX: -1.85, minZ: -0.15,  maxZ:  0.15  },
-    { minX:  1.85, maxX:  2.15, minZ: -0.15,  maxZ:  0.15  },
-    { minX: -2.15, maxX: -1.85, minZ:  8.85,  maxZ:  9.15  },
-    { minX:  1.85, maxX:  2.15, minZ:  8.85,  maxZ:  9.15  },
-    { minX: -2.15, maxX: -1.85, minZ: 21.85,  maxZ: 22.15  },
-    { minX:  1.85, maxX:  2.15, minZ: 21.85,  maxZ: 22.15  },
-    { minX: -2.15, maxX: -1.85, minZ: 37.85,  maxZ: 38.15  },
-    { minX:  1.85, maxX:  2.15, minZ: 37.85,  maxZ: 38.15  },
+    { minX: -3.65, maxX: -3.35, minZ: -0.15,  maxZ:  0.15  },
+    { minX:  3.35, maxX:  3.65, minZ: -0.15,  maxZ:  0.15  },
+    { minX: -3.65, maxX: -3.35, minZ:  8.85,  maxZ:  9.15  },
+    { minX:  3.35, maxX:  3.65, minZ:  8.85,  maxZ:  9.15  },
+    { minX: -3.65, maxX: -3.35, minZ: 21.85,  maxZ: 22.15  },
+    { minX:  3.35, maxX:  3.65, minZ: 21.85,  maxZ: 22.15  },
+    { minX: -3.65, maxX: -3.35, minZ: 37.85,  maxZ: 38.15  },
+    { minX:  3.35, maxX:  3.65, minZ: 37.85,  maxZ: 38.15  },
 
     // ── Sign posts ──────────────────────────────────────────
     { minX: 3.3,  maxX: 3.7,  minZ:  0.95,  maxZ:  1.45  },

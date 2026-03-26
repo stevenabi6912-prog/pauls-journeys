@@ -79,6 +79,32 @@ const Game = {
   hintActive:          false,
   cutsceneActive:      false,
   cutsceneTimer:       0,
+  npcPatrolStates:          {},
+  dustParticles:            [],
+  dustSpawnTimer:           0,
+  templeBackBonusCollected: false,
+  questReadyPopupShown:     false,
+  ambientCtx:               null,
+
+  // ── RUNNER STATE ──────────────────────────────────────────
+  runnerActive:      false,
+  runnerLane:        1,         // 0=left 1=center 2=right
+  runnerTargetLane:  1,
+  runnerLaneX:       [-2.5, 0, 2.5],
+  runnerSpeed:       8,         // units / sec forward
+  runnerTime:        0,         // elapsed seconds
+  runnerTimeLimit:   118,       // finish just under 2 min
+  runnerJumping:     false,
+  runnerJumpVel:     0,
+  runnerJumpY:       0,
+  runnerLives:       3,
+  runnerInvincible:  0,
+  runnerFinished:    false,
+  runnerObstacles:   [],        // { mesh, laneX, z, type }
+  runnerCoins:       [],        // { mesh, laneX, z }
+  runnerRoadMeshes:  [],        // road chunks to despawn
+  runnerNextZ:       30,        // next z to spawn content
+  runnerLanePrevJoy: false,     // edge-detect joystick lane input
 
   // ── DOM REFS ──────────────────────────────────────────────
   elDialogueBox:    null,
@@ -184,13 +210,13 @@ const Game = {
 
   // ── LIGHTING ──────────────────────────────────────────────
   setupLighting() {
-    // Sky/ground hemisphere — warm sky, sandy bounce
-    const hemi = new THREE.HemisphereLight(0x9fc8e8, 0xc49060, 0.7);
+    // Golden afternoon — warm amber sky, sandy bounce
+    const hemi = new THREE.HemisphereLight(0xffd890, 0xc49060, 0.65);
     this.scene.add(hemi);
 
-    // Sun
-    const sun = new THREE.DirectionalLight(0xffe0a0, 1.8);
-    sun.position.set(22, 38, 22);
+    // Sun — low western afternoon angle, warm orange-gold
+    const sun = new THREE.DirectionalLight(0xffaa50, 2.0);
+    sun.position.set(40, 20, 18);   // lower + westward = longer shadows
     sun.castShadow = true;
     sun.shadow.mapSize.width  = 2048;
     sun.shadow.mapSize.height = 2048;
@@ -203,8 +229,8 @@ const Game = {
     sun.shadow.bias = -0.0008;
     this.scene.add(sun);
 
-    // Soft cool rim from north
-    const rim = new THREE.DirectionalLight(0xaabbcc, 0.35);
+    // Warm eastern fill — soft amber shadow fill
+    const rim = new THREE.DirectionalLight(0xc49050, 0.30);
     rim.position.set(-10, 12, -20);
     this.scene.add(rim);
   },
@@ -504,6 +530,9 @@ const Game = {
       group.position.set(npcData.x, ny, npcData.z);
       this.npcObjects[npcData.id] = { group: group, data: npcData };
       this.scene.add(group);
+      if (npcData.patrol) {
+        this.npcPatrolStates[npcData.id] = { t: 0, dir: 1 };
+      }
     }
   },
 
@@ -547,7 +576,63 @@ const Game = {
   createNPCGroup(npc) {
     const group = new THREE.Group();
 
-    if (npc.isHighPriest) {
+    if (npc.isRomanSoldier) {
+      // Armored tunic
+      const robeGeo = new THREE.CylinderGeometry(0.2, 0.3, 0.85, 8);
+      const robeMat = new THREE.MeshStandardMaterial({ roughness: 0.65, metalness: 0.25, color: npc.bodyColor });
+      const robe    = new THREE.Mesh(robeGeo, robeMat);
+      robe.position.y = 0.42;
+      robe.castShadow = true;
+      group.add(robe);
+      // Bronze hem/belt strip
+      const beltGeo = new THREE.CylinderGeometry(0.31, 0.31, 0.07, 8);
+      const beltMat = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.75, color: npc.accentColor });
+      const belt    = new THREE.Mesh(beltGeo, beltMat);
+      belt.position.y = 0.12;
+      group.add(belt);
+      // Head
+      const headGeo = new THREE.SphereGeometry(0.21, 8, 6);
+      const headMat = new THREE.MeshStandardMaterial({ roughness: 0.88, metalness: 0, color: npc.headColor });
+      const head    = new THREE.Mesh(headGeo, headMat);
+      head.position.y = 1.22;
+      head.castShadow = true;
+      group.add(head);
+      // Eyes
+      const solEyeGeo = new THREE.SphereGeometry(0.028, 5, 4);
+      const solEyeMat = new THREE.MeshStandardMaterial({ roughness: 0.8, color: 0x120808 });
+      const solEyeL   = new THREE.Mesh(solEyeGeo, solEyeMat);
+      solEyeL.position.set(-0.075, 1.235, 0.185);
+      const solEyeR   = new THREE.Mesh(solEyeGeo, solEyeMat);
+      solEyeR.position.set( 0.075, 1.235, 0.185);
+      group.add(solEyeL, solEyeR);
+
+      // Iron helmet (galea)
+      const helmGeo = new THREE.CylinderGeometry(0.11, 0.24, 0.18, 8);
+      const helmMat = new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.85, color: 0x707878 });
+      const helm    = new THREE.Mesh(helmGeo, helmMat);
+      helm.position.y = 1.48;
+      group.add(helm);
+      // Red crest (crista transversa)
+      const crestGeo = new THREE.BoxGeometry(0.05, 0.2, 0.42);
+      const crestMat = new THREE.MeshStandardMaterial({ roughness: 0.9, color: 0xcc1818 });
+      const crest   = new THREE.Mesh(crestGeo, crestMat);
+      crest.position.y = 1.68;
+      group.add(crest);
+      // Wooden spear shaft
+      const shaftGeo = new THREE.CylinderGeometry(0.025, 0.025, 2.2, 5);
+      const shaftMat = new THREE.MeshStandardMaterial({ roughness: 0.8, color: 0x7a4a18 });
+      const shaft   = new THREE.Mesh(shaftGeo, shaftMat);
+      shaft.position.set(0.34, 1.1, 0);
+      shaft.castShadow = true;
+      group.add(shaft);
+      // Iron spear tip
+      const tipGeo = new THREE.ConeGeometry(0.04, 0.18, 5);
+      const tipMat = new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.9, color: 0xd0d8d0 });
+      const tip    = new THREE.Mesh(tipGeo, tipMat);
+      tip.position.set(0.34, 2.29, 0);
+      group.add(tip);
+
+    } else if (npc.isHighPriest) {
       // Wider robe
       const robeGeo = new THREE.CylinderGeometry(0.26, 0.46, 1.1, 8);
       const robeMat = new THREE.MeshStandardMaterial({ roughness: 0.88, metalness: 0, color: npc.bodyColor });
@@ -577,6 +662,23 @@ const Game = {
       const mitre    = new THREE.Mesh(mitreGeo, mitreMat);
       mitre.position.y = 1.87;
       group.add(mitre);
+
+      // White hair (beneath mitre)
+      const hpHairGeo = new THREE.SphereGeometry(0.252, 7, 5);
+      const hpHairMat = new THREE.MeshStandardMaterial({ roughness: 0.95, color: 0xe8e0d0 });
+      const hpHair    = new THREE.Mesh(hpHairGeo, hpHairMat);
+      hpHair.scale.y  = 0.46;
+      hpHair.position.y = 1.18;
+      group.add(hpHair);
+
+      // Eyes
+      const hpEyeGeo = new THREE.SphereGeometry(0.03, 5, 4);
+      const hpEyeMat = new THREE.MeshStandardMaterial({ roughness: 0.8, color: 0x120808 });
+      const hpEyeL   = new THREE.Mesh(hpEyeGeo, hpEyeMat);
+      hpEyeL.position.set(-0.085, 1.345, 0.22);
+      const hpEyeR   = new THREE.Mesh(hpEyeGeo, hpEyeMat);
+      hpEyeR.position.set( 0.085, 1.345, 0.22);
+      group.add(hpEyeL, hpEyeR);
 
       // Breastplate
       const bpGeo = new THREE.BoxGeometry(0.4, 0.32, 0.06);
@@ -635,6 +737,23 @@ const Game = {
       const wrap    = new THREE.Mesh(wrapGeo, wrapMat);
       wrap.position.y = 1.25;
       group.add(wrap);
+
+      // Hair (dark cap beneath wrap)
+      const npcHairGeo = new THREE.SphereGeometry(0.218, 7, 5);
+      const npcHairMat = new THREE.MeshStandardMaterial({ roughness: 0.95, color: npc.hairColor || 0x1e0e06 });
+      const npcHair    = new THREE.Mesh(npcHairGeo, npcHairMat);
+      npcHair.scale.y  = 0.48;
+      npcHair.position.y = 1.10;
+      group.add(npcHair);
+
+      // Eyes
+      const npcEyeGeo = new THREE.SphereGeometry(0.028, 5, 4);
+      const npcEyeMat = new THREE.MeshStandardMaterial({ roughness: 0.8, color: 0x120808 });
+      const npcEyeL   = new THREE.Mesh(npcEyeGeo, npcEyeMat);
+      npcEyeL.position.set(-0.075, 1.235, 0.185);
+      const npcEyeR   = new THREE.Mesh(npcEyeGeo, npcEyeMat);
+      npcEyeR.position.set( 0.075, 1.235, 0.185);
+      group.add(npcEyeL, npcEyeR);
     }
 
     return group;
@@ -791,6 +910,11 @@ const Game = {
 
   // ── UPDATE ────────────────────────────────────────────────
   update(dt) {
+    if (this.runnerActive) {
+      this.updateRunner(dt);
+      return;
+    }
+
     if (this.interactCooldown  > 0) this.interactCooldown  -= dt;
     if (this.gateBlockCooldown > 0) this.gateBlockCooldown -= dt;
 
@@ -802,6 +926,8 @@ const Game = {
     this.updateNPCFacing();
     this.updateInteractUI();
     this.updateFollowers(dt);
+    this.updatePatrolNPCs(dt);
+    this.updateDust(dt);
     this.updateCompass();
     this.updateHintArrow();
   },
@@ -898,7 +1024,7 @@ const Game = {
     // Temple entry / exit transition
     if (!this.templeTransitioning) {
       const px = pos.x, pz = pos.z;
-      if (!this.templeInside && pz < -11.5 && Math.abs(px) < 1.8) {
+      if (!this.templeInside && pz < -11.5 && pz > -14 && Math.abs(px) < 1.8) {
         this.enterTemple();
       } else if (this.templeInside && pz > -11.5 && Math.abs(px) < 1.3) {
         this.exitTemple();
@@ -908,6 +1034,14 @@ const Game = {
     // Check for Damascus Road trigger (only after gate guard unlocks it)
     if (this.gateUnlocked && pos.z > 55.8 && !this.damascusRoadActive) {
       this.triggerDamascusRoad();
+    }
+
+    // Hidden bonus behind the temple — 50 shekels, one time only
+    if (!this.templeBackBonusCollected && !this.templeInside && pos.z < -24) {
+      this.templeBackBonusCollected = true;
+      this.inventory.shekels += 50;
+      this.updateInventoryHUD();
+      this.showNotification('You found something\nhidden behind the temple...\n+50 shekels!');
     }
 
     // Damascus Road: encounter trigger mid-road
@@ -1289,7 +1423,7 @@ const Game = {
       const nid = this.currentDialogueNPC.data.id;
 
       if (cb === 'receive_letters') {
-        this.receiveLetters();
+        this.startSealingMinigame(() => { this.receiveLetters(); });
 
       } else if (cb === 'recruit_companion' && !this.recruitedNPCs[nid] && this.hasLetters) {
         this.recruitedNPCs[nid] = true;
@@ -1409,6 +1543,28 @@ const Game = {
         } else if (!this.horsesAcquired) {
           this.showNotification('Not enough shekels!\nNeed 15 to buy 5 horses.\nMake and sell tents to earn coin.');
         }
+
+      } else if (cb === 'believer_choice') {
+        const npcRef = this.currentDialogueNPC;
+        this.showChoice(
+          'What will you do?',
+          'Pass them by',
+          'Arrest them',
+          () => {
+            // Turn the NPC away — they slip into the shadows
+            if (npcRef && this.npcObjects[npcRef.data.id]) {
+              this.npcObjects[npcRef.data.id].group.rotation.y = Math.PI;
+            }
+            this.showNotification('You walk past in silence.\nTheir eyes never leave you\nas you turn the corner.');
+          },
+          () => {
+            // NPC disappears — taken into custody
+            if (npcRef && this.npcObjects[npcRef.data.id]) {
+              this.npcObjects[npcRef.data.id].group.visible = false;
+            }
+            this.showArrestCinematic();
+          }
+        );
 
       } else if (cb === 'restore_sight') {
         this.restoreSight();
@@ -1530,7 +1686,11 @@ const Game = {
     this.updateInventoryHUD();
     this.updateSatchelHUD();
 
-    this.showNotification('\ud83d\udcdc Letters added to satchel!\nFind companions & buy horses\nto prepare for Damascus.');
+    this.showQuestPopup(
+      'Prepare for the Road',
+      'You carry the sealed letters of Caiaphas. Now recruit 4 companions for the journey and purchase 5 horses from Elias the Stable Master.',
+      '— Acts 9:2'
+    );
   },
 
   // ── QUEST PROGRESS ────────────────────────────────────────
@@ -1541,6 +1701,16 @@ const Game = {
     if (c >= 4 && h) {
       this.elQuestText.textContent    = 'Show letters to the Gate Guard';
       this.elScriptureRef.textContent = 'Acts 9:2';
+      if (!this.questReadyPopupShown) {
+        this.questReadyPopupShown = true;
+        setTimeout(() => {
+          this.showQuestPopup(
+            'Company Assembled',
+            'Your companions are recruited and your horses stand ready. Present your sealed letters to the Gate Guard at the south wall.',
+            '— Acts 9:2'
+          );
+        }, 1200);
+      }
     } else if (!h && c < 4) {
       this.elQuestText.textContent = 'Find companions (' + c + '/4) & buy horses';
     } else if (!h) {
@@ -1611,7 +1781,12 @@ const Game = {
       ov.style.opacity = '0';
       setTimeout(() => {
         if (ov.parentNode) ov.remove();
-        this.showHintArrow();
+        this.showQuestPopup(
+          'Find the High Priest',
+          'Head north through the market to the Holy Temple. Speak with Caiaphas, the High Priest, and receive your letters of passage.',
+          '— Acts 9:1'
+        );
+        this.initAmbientSound();
       }, 1200);
       ov.removeEventListener('click', dismiss);
       ov.removeEventListener('touchend', dismiss);
@@ -1696,6 +1871,589 @@ const Game = {
     setTimeout(() => {
       this.elNotification.classList.add('hidden');
     }, 3500);
+  },
+
+  // ── QUEST POPUP ───────────────────────────────────────────
+  showQuestPopup(title, body, verse) {
+    this.dialogueActive = true;
+    const popup = document.getElementById('quest-popup');
+    document.getElementById('qp-title').textContent = title;
+    document.getElementById('qp-body').textContent  = body;
+    document.getElementById('qp-verse').textContent = verse || '';
+    popup.classList.remove('hidden');
+    const dismiss = () => {
+      popup.classList.add('hidden');
+      this.dialogueActive = false;
+    };
+    document.getElementById('qp-dismiss').onclick = dismiss;
+  },
+
+  // ── ARREST CINEMATIC ──────────────────────────────────────
+  showArrestCinematic() {
+    this.dialogueActive = true;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;transition:background 0.65s;pointer-events:none;text-align:center;';
+    const verse = document.createElement('div');
+    verse.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-size:clamp(1rem,3vw,1.2rem);font-style:italic;color:rgba(200,170,100,0);line-height:1.85;max-width:420px;transition:color 0.9s;';
+    verse.innerHTML = '\u201cAs for Saul, he made havoc of the church,<br>entering into every house, and haling men<br>and women committed them to prison.\u201d';
+    const ref = document.createElement('div');
+    ref.style.cssText = 'font-family:Cinzel,serif;font-size:0.68rem;letter-spacing:0.18em;color:rgba(150,120,60,0);margin-top:16px;transition:color 0.9s 0.25s;';
+    ref.textContent = '\u2014 ACTS 8:3';
+    ov.appendChild(verse);
+    ov.appendChild(ref);
+    document.body.appendChild(ov);
+    requestAnimationFrame(() => {
+      ov.style.background = 'rgba(0,0,0,0.92)';
+      verse.style.color   = 'rgba(200,170,100,1)';
+      ref.style.color     = 'rgba(150,120,60,1)';
+    });
+    setTimeout(() => {
+      ov.style.transition = 'background 1.1s, opacity 1.1s';
+      ov.style.opacity    = '0';
+      setTimeout(() => { ov.remove(); this.dialogueActive = false; }, 1100);
+    }, 3800);
+  },
+
+  // ── AMBIENT SOUND ─────────────────────────────────────────
+  initAmbientSound() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      this.ambientCtx = ctx;
+
+      // 3-second white noise buffer
+      const sr  = ctx.sampleRate;
+      const len = sr * 3;
+      const buf = ctx.createBuffer(1, len, sr);
+      const d   = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+
+      // Crowd murmur — bandpass noise
+      const crowd = ctx.createBufferSource();
+      crowd.buffer = buf; crowd.loop = true;
+      const crowdBP = ctx.createBiquadFilter();
+      crowdBP.type = 'bandpass'; crowdBP.frequency.value = 380; crowdBP.Q.value = 0.32;
+      const crowdGain = ctx.createGain(); crowdGain.gain.value = 0.062;
+      crowd.connect(crowdBP); crowdBP.connect(crowdGain); crowdGain.connect(ctx.destination);
+      crowd.start();
+
+      // Breeze — lowpass noise with slow LFO swell
+      const wind = ctx.createBufferSource();
+      wind.buffer = buf; wind.loop = true; wind.playbackRate.value = 0.55;
+      const windLP = ctx.createBiquadFilter();
+      windLP.type = 'lowpass'; windLP.frequency.value = 155;
+      const windGain = ctx.createGain(); windGain.gain.value = 0.038;
+      wind.connect(windLP); windLP.connect(windGain); windGain.connect(ctx.destination);
+      wind.start(ctx.currentTime + 1.0);
+
+      const lfo = ctx.createOscillator();
+      lfo.type = 'sine'; lfo.frequency.value = 0.07;
+      const lfoAmp = ctx.createGain(); lfoAmp.gain.value = 0.02;
+      lfo.connect(lfoAmp); lfoAmp.connect(windGain.gain);
+      lfo.start();
+    } catch (e) { /* audio unavailable */ }
+  },
+
+  stopAmbientSound() {
+    if (this.ambientCtx) { this.ambientCtx.close(); this.ambientCtx = null; }
+  },
+
+  // ── RUNNER: BUILD INITIAL ROAD SEGMENT ────────────────────
+  buildRunnerStart() {
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0xb09070, roughness: 0.95 });
+    const dustMat = new THREE.MeshStandardMaterial({ color: 0xc8a870, roughness: 1.0 });
+    const hillMat = new THREE.MeshStandardMaterial({ color: 0xa09060, roughness: 1.0 });
+
+    // Wide ground plane
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 400), dustMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(0, 0, 205);
+    ground.receiveShadow = true;
+    this.scene.add(ground);
+
+    // Road strip (3 lanes = 7.5 wide, add some shoulder)
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(9, 400), roadMat);
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(0, 0.02, 205);
+    this.scene.add(road);
+
+    // Low rolling hills in background
+    [-18, 18].forEach(hx => {
+      const hill = new THREE.Mesh(new THREE.SphereGeometry(10, 8, 5), hillMat);
+      hill.position.set(hx, -7, 60);
+      hill.scale.y = 0.4;
+      this.scene.add(hill);
+      const hill2 = new THREE.Mesh(new THREE.SphereGeometry(12, 8, 5), hillMat);
+      hill2.position.set(hx * 1.3, -8, 130);
+      hill2.scale.y = 0.35;
+      this.scene.add(hill2);
+    });
+
+    // Pre-spawn first 80 units of content
+    while (this.runnerNextZ < 80) this.spawnRunnerChunk();
+  },
+
+  // ── RUNNER: SPAWN CONTENT CHUNK ───────────────────────────
+  spawnRunnerChunk() {
+    const z    = this.runnerNextZ;
+    const time = this.runnerTime;
+
+    // Decorative side rocks every chunk
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x887060, roughness: 0.95 });
+    [8, -8].forEach(rx => {
+      const s = 0.4 + Math.random() * 0.9;
+      const r = new THREE.Mesh(new THREE.BoxGeometry(s, s * 0.7, s), rockMat);
+      r.position.set(rx + (Math.random() - 0.5) * 2, s * 0.35, z + Math.random() * 10);
+      this.scene.add(r);
+      this.runnerRoadMeshes.push({ mesh: r, z: r.position.z });
+    });
+
+    // Obstacle pattern based on elapsed time
+    const phase = time < 35 ? 0 : time < 75 ? 1 : 2;
+    this.spawnObstaclePattern(z, phase);
+
+    // Scatter shekels — reward for safe gaps
+    if (Math.random() < 0.42) {
+      const cLane = Math.floor(Math.random() * 3);
+      this.spawnCoin(cLane, z + 3 + Math.random() * 5);
+      if (Math.random() < 0.35) this.spawnCoin(cLane, z + 9 + Math.random() * 3);
+    }
+
+    this.runnerNextZ += 12 + Math.random() * 6;
+  },
+
+  // ── RUNNER: OBSTACLE PATTERNS ─────────────────────────────
+  spawnObstaclePattern(z, phase) {
+    const r = Math.random();
+    const rl = () => Math.floor(Math.random() * 3);
+
+    if (phase === 0) {
+      // Easy: single obstacles with generous gaps
+      if      (r < 0.18) this.spawnObs('rock',   rl(), z);
+      else if (r < 0.32) this.spawnObs('thorn',  rl(), z);
+      else if (r < 0.45) this.spawnObs('person', 1, z);
+      else if (r < 0.56) this.spawnObs('person', Math.random() < 0.5 ? 0 : 2, z);
+      else if (r < 0.67) this.spawnObs('cart',   rl(), z);
+      else if (r < 0.78) this.spawnObs('camel',  rl(), z);
+      else if (r < 0.88) this.spawnObs('log',    rl(), z);
+      // else gap
+
+    } else if (phase === 1) {
+      // Medium: two-obstacle combos, more pressure
+      if      (r < 0.13) { this.spawnObs('rock', 0, z); this.spawnObs('rock', 2, z); }
+      else if (r < 0.24) this.spawnObs('soldier', rl(), z);
+      else if (r < 0.35) { this.spawnObs('log', 0, z); this.spawnObs('log', 1, z); }
+      else if (r < 0.46) { this.spawnObs('log', 1, z); this.spawnObs('log', 2, z); }
+      else if (r < 0.55) this.spawnObs('camel', 1, z);   // center camel — dodge
+      else if (r < 0.64) { this.spawnObs('cart', Math.random() < 0.5 ? 0 : 2, z); this.spawnObs('thorn', 1, z); }
+      else if (r < 0.73) this.spawnObs('pillar', rl(), z);
+      else if (r < 0.82) this.spawnObs('boulder', 1, z);
+      else if (r < 0.91) { this.spawnObs('camel', 0, z); this.spawnObs('thorn', 2, z); }
+      else { this.spawnObs('rock', rl(), z); this.spawnObs('person', rl(), z + 8); }
+
+    } else {
+      // Hard: tight combos, camels + soldiers, falling pillars
+      if      (r < 0.12) { this.spawnObs('rock', 0, z);    this.spawnObs('rock', 1, z); }
+      else if (r < 0.22) { this.spawnObs('camel', 1, z);   this.spawnObs('rock', 0, z); }
+      else if (r < 0.32) { this.spawnObs('camel', 1, z);   this.spawnObs('thorn', 2, z); }
+      else if (r < 0.42) { this.spawnObs('soldier', 0, z); this.spawnObs('rock', 2, z); }
+      else if (r < 0.52) { this.spawnObs('soldier', 2, z); this.spawnObs('rock', 0, z); }
+      else if (r < 0.62) { this.spawnObs('cart', 0, z);    this.spawnObs('soldier', 2, z); }
+      else if (r < 0.71) { this.spawnObs('pillar', 1, z);  this.spawnObs('camel', Math.random() < 0.5 ? 0 : 2, z + 9); }
+      else if (r < 0.80) { this.spawnObs('log', 0, z);     this.spawnObs('log', 1, z); this.spawnObs('person', 2, z + 7); }
+      else if (r < 0.90) { this.spawnObs('cart', 1, z);    this.spawnObs('rock', 0, z + 5); }
+      else { this.spawnObs('boulder', rl(), z); this.spawnObs('rock', rl(), z + 10); }
+    }
+  },
+
+  // ── RUNNER: SPAWN SINGLE OBSTACLE ─────────────────────────
+  spawnObs(type, lane, z) {
+    const lx = this.runnerLaneX[lane];
+    let mesh;
+
+    if (type === 'rock') {
+      const s = 0.7 + Math.random() * 0.4;
+      mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(s * 1.6, s * 0.55, s * 1.2),
+        new THREE.MeshStandardMaterial({ color: 0x807060, roughness: 0.95 })
+      );
+      mesh.position.set(lx, s * 0.28, z);
+      mesh._clearJumpY = 0.35;   // player needs jumpY > this to clear
+
+    } else if (type === 'log') {
+      mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.22, 2.2, 7),
+        new THREE.MeshStandardMaterial({ color: 0x7a5a30, roughness: 0.95 })
+      );
+      mesh.rotation.z = Math.PI / 2;
+      mesh.position.set(lx, 0.22, z);
+      mesh._clearJumpY = 0.38;
+
+    } else if (type === 'person') {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 1.2, 7),
+        new THREE.MeshStandardMaterial({ color: 0x506878, roughness: 0.9 }));
+      body.position.y = 0.6;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 7, 6),
+        new THREE.MeshStandardMaterial({ color: 0xc09060, roughness: 0.85 }));
+      head.position.y = 1.35;
+      g.add(body); g.add(head);
+      g.position.set(lx, 0, z);
+      mesh = g;
+      mesh._clearJumpY = 999; // can't jump over
+
+    } else if (type === 'soldier') {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 1.3, 7),
+        new THREE.MeshStandardMaterial({ color: 0x7a1818, roughness: 0.8 }));
+      body.position.y = 0.65;
+      const helm = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.32, 7),
+        new THREE.MeshStandardMaterial({ color: 0xd4a830, roughness: 0.5, metalness: 0.4 }));
+      helm.position.y = 1.55;
+      const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.4, 5),
+        new THREE.MeshStandardMaterial({ color: 0x8a6a30 }));
+      spear.position.set(0.4, 1.2, 0);
+      g.add(body); g.add(helm); g.add(spear);
+      g.position.set(lx, 0, z);
+      mesh = g;
+      mesh._clearJumpY = 999;
+
+    } else if (type === 'camel') {
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0xc49050, roughness: 0.9 });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.45, 1.5, 7), mat);
+      body.rotation.z = Math.PI / 2; body.position.set(0, 0.98, 0);
+      const hump = new THREE.Mesh(new THREE.SphereGeometry(0.35, 6, 5), mat.clone());
+      hump.scale.y = 0.75; hump.position.set(0.1, 1.52, 0);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.7, 6), mat.clone());
+      neck.rotation.z = -0.45; neck.position.set(0.82, 1.54, 0);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.28, 0.22), mat.clone());
+      head.position.set(1.26, 1.87, 0);
+      [[-0.45,-0.18],[-0.45,0.18],[0.38,-0.18],[0.38,0.18]].forEach(([lx_,lz_]) => {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.92, 5), mat.clone());
+        leg.position.set(lx_, 0.46, lz_); g.add(leg);
+      });
+      g.add(body); g.add(hump); g.add(neck); g.add(head);
+      g.position.set(lx, 0, z); mesh = g;
+      mesh._clearJumpY = 999;
+
+    } else if (type === 'cart') {
+      const g = new THREE.Group();
+      const wmat = new THREE.MeshStandardMaterial({ color: 0x8a6030, roughness: 0.9 });
+      const box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.44, 0.92), wmat);
+      box.position.y = 0.82;
+      [-0.56, 0.56].forEach(wx => {
+        const wh = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.065, 5, 8),
+          new THREE.MeshStandardMaterial({ color: 0x5a3818, roughness: 0.9 }));
+        wh.rotation.y = Math.PI / 2; wh.position.set(wx, 0.36, 0); g.add(wh);
+      });
+      g.add(box); g.position.set(lx, 0, z); mesh = g;
+      mesh._clearJumpY = 999;
+
+    } else if (type === 'thorn') {
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0x627040, roughness: 1.0 });
+      [[0,0.17,0,1,1,1],[0.28,0.14,0.12,0.78,0.85,0.7],[-0.22,0.13,-0.08,0.7,0.8,0.65]].forEach(([x,y,zz,sx,sy,sz]) => {
+        const b = new THREE.Mesh(new THREE.SphereGeometry(0.38, 6, 4), mat.clone());
+        b.scale.set(sx, sy * 0.38, sz); b.position.set(x, y, zz); g.add(b);
+      });
+      g.position.set(lx, 0, z); mesh = g;
+      mesh._clearJumpY = 0.22;
+
+    } else if (type === 'pillar') {
+      // Fallen stone column — needs a solid jump to clear
+      mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.34, 0.34, 2.5, 9),
+        new THREE.MeshStandardMaterial({ color: 0xb0a888, roughness: 0.85 })
+      );
+      mesh.rotation.z = Math.PI / 2;
+      mesh.position.set(lx, 0.34, z);
+      mesh._clearJumpY = 0.55;
+
+    } else { // boulder
+      mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.75, 7, 6),
+        new THREE.MeshStandardMaterial({ color: 0x706858, roughness: 0.95 })
+      );
+      mesh.scale.y = 0.7;
+      mesh.position.set(lx, 0.52, z);
+      mesh._clearJumpY = 999;
+    }
+
+    mesh.castShadow = true;
+    this.scene.add(mesh);
+    this.runnerObstacles.push({ mesh, laneX: lx, z, type });
+  },
+
+  // ── RUNNER: SPAWN SHEKEL COIN ──────────────────────────────
+  spawnCoin(lane, z) {
+    const lx   = this.runnerLaneX[lane];
+    const coin = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.21, 0.21, 0.07, 10),
+      new THREE.MeshStandardMaterial({ color: 0xf5c018, roughness: 0.2, metalness: 0.65, emissive: 0xc09010, emissiveIntensity: 0.45 })
+    );
+    coin.rotation.x = Math.PI / 2;   // lie flat like a coin
+    coin.position.set(lx, 0.58, z);
+    this.scene.add(coin);
+    this.runnerCoins.push({ mesh: coin, laneX: lx, z });
+  },
+
+  // ── RUNNER: MAIN UPDATE ────────────────────────────────────
+  updateRunner(dt) {
+    if (this.dialogueActive || this.runnerFinished) {
+      // Still render camera
+      this.updateRunnerCamera(dt);
+      return;
+    }
+
+    // ── Timer & speed ramp
+    this.runnerTime += dt;
+    const pct = Math.min(this.runnerTime / this.runnerTimeLimit, 1.0);
+    this.runnerSpeed = 8 + pct * 9;  // 8 → 17 units/sec over 2 min
+
+    // ── Move player forward
+    const pz = this.player.pos.z + this.runnerSpeed * dt;
+    this.player.pos.z = pz;
+
+    // ── Lane interpolation (smooth slide)
+    const targetX = this.runnerLaneX[this.runnerTargetLane];
+    this.player.pos.x += (targetX - this.player.pos.x) * Math.min(10 * dt, 1);
+
+    // ── Jump physics
+    if (this.runnerJumping) {
+      this.runnerJumpVel -= 30 * dt;
+      this.runnerJumpY  += this.runnerJumpVel * dt;
+      if (this.runnerJumpY <= 0) {
+        this.runnerJumpY   = 0;
+        this.runnerJumpVel = 0;
+        this.runnerJumping = false;
+      }
+    }
+
+    // Apply to mesh
+    this.playerGroup.position.x = this.player.pos.x;
+    this.playerGroup.position.z = this.player.pos.z;
+    this.playerGroup.position.y = this.runnerJumpY;
+    this.playerGroup.rotation.y = Math.PI; // face forward
+
+    // ── Camera
+    this.updateRunnerCamera(dt);
+
+    // ── Invincibility cooldown
+    if (this.runnerInvincible > 0) this.runnerInvincible -= dt;
+
+    // ── Spawn content ahead
+    while (this.runnerNextZ < pz + 90) this.spawnRunnerChunk();
+
+    // ── Despawn obstacles + road deco behind player
+    this.runnerObstacles = this.runnerObstacles.filter(o => {
+      if (o.z < pz - 15) {
+        this.scene.remove(o.mesh);
+        return false;
+      }
+      return true;
+    });
+    this.runnerRoadMeshes = this.runnerRoadMeshes.filter(o => {
+      if (o.z < pz - 15) {
+        this.scene.remove(o.mesh);
+        return false;
+      }
+      return true;
+    });
+
+    // ── Collect / despawn coins
+    this.runnerCoins = this.runnerCoins.filter(c => {
+      if (c.z < pz - 10) { this.scene.remove(c.mesh); return false; }
+      if (Math.abs(pz - c.z) < 0.85 && Math.abs(px - c.laneX) < 0.95) {
+        this.scene.remove(c.mesh);
+        this.inventory.shekels++;
+        this.updateInventoryHUD();
+        return false;
+      }
+      return true;
+    });
+
+    // ── Joystick lane input (edge detect)
+    if (this.joy.active && this.joy.mag > 0.45) {
+      const jx = Math.cos(this.joy.angle);
+      const jy = Math.sin(this.joy.angle);
+      if (!this.runnerLanePrevJoy) {
+        this.runnerLanePrevJoy = true;
+        if (jx > 0.5  && this.runnerTargetLane < 2) this.runnerTargetLane++;
+        else if (jx < -0.5 && this.runnerTargetLane > 0) this.runnerTargetLane--;
+        else if (jy < -0.5 && !this.runnerJumping) this.startRunnerJump();
+      }
+    } else {
+      this.runnerLanePrevJoy = false;
+    }
+
+    // ── Collision
+    this.checkRunnerCollision();
+
+    // ── Progress bar
+    const fill = document.getElementById('runner-bar-fill');
+    if (fill) fill.style.width = (pct * 100) + '%';
+
+    // ── Finish check
+    if (this.runnerTime >= this.runnerTimeLimit) {
+      this.finishRunner();
+    }
+  },
+
+  updateRunnerCamera(dt) {
+    const px = this.player.pos.x;
+    const pz = this.player.pos.z;
+    const tx = px * 0.4;
+    const tz = pz - 7;
+    const ty = 5.5;
+    this.cam.pos.x += (tx - this.cam.pos.x) * 10 * dt;
+    this.cam.pos.y += (ty - this.cam.pos.y) * 5  * dt;
+    this.cam.pos.z += (tz - this.cam.pos.z) * 8  * dt;
+    this.camera.position.copy(this.cam.pos);
+    this.camera.lookAt(px, 0.5, pz + 10);
+  },
+
+  startRunnerJump() {
+    this.runnerJumping  = true;
+    this.runnerJumpVel  = 10.5;
+    this.runnerJumpY    = 0.01;
+  },
+
+  checkRunnerCollision() {
+    if (this.runnerInvincible > 0) return;
+    const px = this.player.pos.x;
+    const pz = this.player.pos.z;
+
+    for (const obs of this.runnerObstacles) {
+      const dz = Math.abs(pz - obs.z);
+      const dx = Math.abs(px - obs.laneX);
+      if (dz < 1.0 && dx < 1.1) {
+        // Jumpable obstacles: clear if high enough
+        if (obs._clearJumpY !== undefined && obs._clearJumpY < 999) {
+          if (this.runnerJumpY > obs._clearJumpY + 0.05) continue;
+        }
+        this.hitRunner();
+        return;
+      }
+    }
+  },
+
+  hitRunner() {
+    this.runnerInvincible = 2.0;
+    this.runnerLives--;
+    // Update heart HUD
+    const hEl = document.getElementById('rh-' + (this.runnerLives + 1));
+    if (hEl) hEl.classList.add('lost');
+
+    if (this.runnerLives <= 0) {
+      this.restartRunner();
+      return;
+    }
+    // Flash screen red
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;inset:0;z-index:180;background:rgba(180,30,30,0.45);pointer-events:none;transition:opacity 0.5s;';
+    document.body.appendChild(flash);
+    setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 500); }, 120);
+    this.showNotification('You were knocked back!\n' + this.runnerLives + ' chance' + (this.runnerLives === 1 ? '' : 's') + ' remaining.');
+  },
+
+  restartRunner() {
+    // Remove all runner obstacles, coins, and road deco
+    this.runnerObstacles.forEach(o => this.scene.remove(o.mesh));
+    this.runnerCoins.forEach(c => this.scene.remove(c.mesh));
+    this.runnerRoadMeshes.forEach(o => this.scene.remove(o.mesh));
+    this.runnerObstacles  = [];
+    this.runnerCoins      = [];
+    this.runnerRoadMeshes = [];
+
+    // Reset state
+    this.player.pos.set(0, 0, 5);
+    this.playerGroup.position.set(0, 0, 5);
+    this.playerGroup.position.y = 0;
+    this.runnerTime        = 0;
+    this.runnerSpeed       = 8;
+    this.runnerLane        = 1;
+    this.runnerTargetLane  = 1;
+    this.runnerJumping     = false;
+    this.runnerJumpY       = 0;
+    this.runnerLives       = 3;
+    this.runnerInvincible  = 0;
+    this.runnerNextZ       = 28;
+    this.encounterTriggered = false;
+
+    // Restore hearts
+    ['rh-1','rh-2','rh-3'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('lost');
+    });
+    document.getElementById('runner-bar-fill').style.width = '0%';
+
+    // Rebuild start
+    this.buildRunnerStart();
+    this.showNotification('Saul fell. Rise and continue\nthe road to Damascus.');
+  },
+
+  finishRunner() {
+    if (this.runnerFinished) return;
+    this.runnerFinished = true;
+    this.runnerActive   = false;
+
+    // Restore main HUD
+    document.getElementById('hud').style.display = '';
+    document.getElementById('runner-hud').classList.add('hidden');
+    document.getElementById('runner-btns').classList.add('hidden');
+    document.getElementById('jump-btn').style.display = 'none';
+    document.getElementById('runner-bar-fill').style.width = '100%';
+
+    this.triggerEncounter();
+
+    // Auto-complete after encounter plays out
+    setTimeout(() => {
+      this.restoreSight();
+      setTimeout(() => this.showDamascusComplete(), 2500);
+    }, 14000);
+  },
+
+  // ── RUNNER: CONTROLS ──────────────────────────────────────
+  initRunnerControls() {
+    this._runnerKeyDown = (e) => {
+      if (!this.runnerActive || this.runnerFinished) return;
+      if (e.key === 'ArrowLeft'  && this.runnerTargetLane > 0) { e.preventDefault(); this.runnerTargetLane--; }
+      if (e.key === 'ArrowRight' && this.runnerTargetLane < 2) { e.preventDefault(); this.runnerTargetLane++; }
+      if ((e.key === 'ArrowUp' || e.key === ' ') && !this.runnerJumping && !this.dialogueActive) {
+        e.preventDefault(); this.startRunnerJump();
+      }
+    };
+    window.addEventListener('keydown', this._runnerKeyDown);
+
+    // Swipe detection on canvas
+    let sx = 0, sy = 0;
+    const canvas = document.getElementById('game-canvas');
+    this._runnerTouchStart = (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; };
+    this._runnerTouchEnd   = (e) => {
+      if (!this.runnerActive || this.runnerFinished || this.dialogueActive) return;
+      const dx = e.changedTouches[0].clientX - sx;
+      const dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 25) {
+        if (dx < 0 && this.runnerTargetLane > 0) this.runnerTargetLane--;
+        if (dx > 0 && this.runnerTargetLane < 2) this.runnerTargetLane++;
+      } else if (dy < -25 && !this.runnerJumping) {
+        this.startRunnerJump();
+      }
+    };
+    canvas.addEventListener('touchstart', this._runnerTouchStart, { passive: true });
+    canvas.addEventListener('touchend',   this._runnerTouchEnd,   { passive: true });
+
+    // Lane buttons
+    const bl = document.getElementById('rb-left');
+    const br = document.getElementById('rb-right');
+    if (bl) bl.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane > 0) this.runnerTargetLane--; }, { passive: false });
+    if (br) br.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane < 2) this.runnerTargetLane++; }, { passive: false });
+
+    // Jump button
+    const jb = document.getElementById('jump-btn');
+    if (jb) jb.addEventListener('touchstart', (e) => { e.preventDefault(); if (!this.runnerJumping && !this.dialogueActive) this.startRunnerJump(); }, { passive: false });
   },
 
   // ── DAMASCUS ROAD CUTSCENE ────────────────────────────────
@@ -1841,58 +2599,69 @@ const Game = {
   loadDamascusRoad() {
     this.damascusRoadActive = true;
 
-    // Remove all scene objects except player, recruited followers, horses, lights
-    const keep = new Set([this.playerGroup]);
-    Object.keys(this.recruitedNPCs).forEach(id => {
-      if (this.npcObjects[id]) keep.add(this.npcObjects[id].group);
-    });
-    // Also hide non-recruited NPCs from scene
-    Object.keys(this.npcObjects).forEach(id => {
-      if (!this.recruitedNPCs[id]) this.npcObjects[id].group.visible = false;
-    });
-    this.horseObjects.forEach(h => keep.add(h));
+    // Remove all Jerusalem scene objects
     const toRemove = [];
     for (const child of this.scene.children) {
-      if (!child.isLight && !keep.has(child)) toRemove.push(child);
+      if (!child.isLight) toRemove.push(child);
     }
     toRemove.forEach(o => this.scene.remove(o));
 
-    // Reset player to start of Damascus Road
+    // Clear Jerusalem systems
+    this.stopAmbientSound();
+    this.npcPatrolStates = {};
+    for (const d of this.dustParticles) { d.mesh.geometry.dispose(); d.mesh.material.dispose(); }
+    this.dustParticles = [];
+
+    // Atmosphere
+    this.scene.fog.color.set(0xd4c090);
+    this.scene.fog.near = 40;
+    this.scene.fog.far  = 120;
+    this.scene.background = new THREE.Color(0xd4c090);
+
+    // Init runner state
+    this.runnerActive      = true;
+    this.runnerFinished    = false;
+    this.runnerLane        = 1;
+    this.runnerTargetLane  = 1;
+    this.runnerSpeed       = 8;
+    this.runnerTime        = 0;
+    this.runnerJumping     = false;
+    this.runnerJumpY       = 0;
+    this.runnerJumpVel     = 0;
+    this.runnerLives       = 3;
+    this.runnerInvincible  = 0;
+    this.runnerObstacles   = [];
+    this.runnerRoadMeshes  = [];
+    this.runnerNextZ       = 28;
+    this.encounterTriggered = false;
+
+    // Place player at start
     this.player.pos.set(0, 0, 5);
     this.playerGroup.position.set(0, 0, 5);
-    this.cam.pos.set(0, 9, 17);
+    this.playerGroup.position.y = 0;
     this.templeInside = false;
 
-    // Reset follower NPCs to formation positions behind player
-    const fOffsets = [[-0.85,1.3],[0.85,1.3],[-1.6,2.4],[1.6,2.4]];
-    let fi = 0;
-    Object.keys(this.recruitedNPCs).forEach(id => {
-      const npc = this.npcObjects[id];
-      if (npc && fi < 4) {
-        npc.group.position.set(fOffsets[fi][0], 0, 5 + fOffsets[fi][1]);
-        fi++;
-      }
-    });
-    // Reset horses too
-    this.horseObjects.forEach((h, i) => {
-      const o = fOffsets[i] || [0, 3];
-      h.position.set(o[0] * 1.2, 0, 5 + o[1] + 1.5);
-    });
+    // Camera behind player
+    this.cam.pos.set(0, 5.5, -1);
 
-    // New atmosphere — dusty desert sky
-    this.scene.fog.color.set(0xccc0a0);
-    this.scene.fog.near = 55;
-    this.scene.fog.far  = 190;
-    this.scene.background = new THREE.Color(0xccc0a0);
-
-    // Build road environment
-    this.buildDamascusRoadWorld();
+    // Build initial road
+    this.buildRunnerStart();
+    this.initRunnerControls();
 
     // HUD
-    this.elQuestText.textContent    = 'Journey south on the road to Damascus';
-    this.elScriptureRef.textContent = 'Acts 9:3';
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('runner-hud').classList.remove('hidden');
+    document.getElementById('jump-btn').style.display = '';
+    const isMobile = 'ontouchstart' in window;
+    if (isMobile) document.getElementById('runner-btns').classList.remove('hidden');
     document.getElementById('location-name').textContent = 'Road to Damascus';
-    document.getElementById('scripture-ref').textContent = 'Acts 9:3';
+
+    // Show brief intro card
+    this.showQuestPopup(
+      'The Road to Damascus',
+      'Dodge travelers and soldiers. Jump over rocks and fallen logs. Reach Damascus before nightfall.',
+      '— Acts 9:3'
+    );
   },
 
   // ── BUILD DAMASCUS ROAD ENVIRONMENT ───────────────────────
@@ -2505,6 +3274,89 @@ const Game = {
   },
 
   // ── FOLLOWERS (recruited soldiers) ────────────────────────
+  // ── PATROL NPCs (Roman soldiers) ──────────────────────────
+  updatePatrolNPCs(dt) {
+    for (const id in this.npcPatrolStates) {
+      const npcObj = this.npcObjects[id];
+      if (!npcObj) continue;
+      const p = npcObj.data.patrol; // [ax,az, bx,bz]
+      const s = this.npcPatrolStates[id];
+
+      s.t += dt * 0.20 * s.dir;
+      if (s.t >= 1) { s.t = 1; s.dir = -1; }
+      if (s.t <= 0) { s.t = 0; s.dir = 1; }
+
+      const nx = p[0] + (p[2] - p[0]) * s.t;
+      const nz = p[1] + (p[3] - p[1]) * s.t;
+      npcObj.group.position.x = nx;
+      npcObj.group.position.z = nz;
+      npcObj.group.position.y = this.getTerrainY(nx, nz);
+
+      // Face direction of travel (unless very close to player — updateNPCFacing handles that)
+      const ddx = (p[2] - p[0]) * s.dir;
+      const ddz = (p[3] - p[1]) * s.dir;
+      if (Math.abs(ddx) > 0.01 || Math.abs(ddz) > 0.01) {
+        const tgt = Math.atan2(ddx, ddz);
+        let diff = tgt - npcObj.group.rotation.y;
+        while (diff >  Math.PI) diff -= 2 * Math.PI;
+        while (diff < -Math.PI) diff += 2 * Math.PI;
+        npcObj.group.rotation.y += diff * 0.08;
+      }
+    }
+  },
+
+  // ── FOOTSTEP DUST PARTICLES ────────────────────────────────
+  spawnDust(x, y, z) {
+    const geo = new THREE.CircleGeometry(0.07 + Math.random() * 0.06, 5);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xc8a870, transparent: true, opacity: 0.35,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(
+      x + (Math.random() - 0.5) * 0.28,
+      y + 0.02,
+      z + (Math.random() - 0.5) * 0.28
+    );
+    this.scene.add(mesh);
+    this.dustParticles.push({
+      mesh,
+      life: 0,
+      maxLife: 0.55 + Math.random() * 0.3,
+      vx: (Math.random() - 0.5) * 0.4,
+      vz: (Math.random() - 0.5) * 0.4,
+    });
+  },
+
+  updateDust(dt) {
+    // Spawn when walking on ground (not in temple)
+    if (this.player.moving && !this.templeInside && !this.damascusRoadActive) {
+      this.dustSpawnTimer += dt;
+      if (this.dustSpawnTimer > 0.09) {
+        this.dustSpawnTimer = 0;
+        const p = this.player.pos;
+        this.spawnDust(p.x, this.getTerrainY(p.x, p.z), p.z);
+      }
+    }
+    // Update existing particles
+    for (let i = this.dustParticles.length - 1; i >= 0; i--) {
+      const d = this.dustParticles[i];
+      d.life += dt;
+      const t = d.life / d.maxLife;
+      d.mesh.material.opacity = 0.35 * (1 - t);
+      d.mesh.scale.setScalar(1 + t * 1.8);
+      d.mesh.position.x += d.vx * dt;
+      d.mesh.position.z += d.vz * dt;
+      if (d.life >= d.maxLife) {
+        this.scene.remove(d.mesh);
+        d.mesh.geometry.dispose();
+        d.mesh.material.dispose();
+        this.dustParticles.splice(i, 1);
+      }
+    }
+  },
+
   updateFollowers(dt) {
     if (!this.hasLetters) return;
     const px = this.player.pos.x;
@@ -2722,6 +3574,166 @@ const Game = {
   },
 
   // ── NEEDLE THREADING MINI-GAME ────────────────────────────
+  // ── LETTER-SEALING MINIGAME ────────────────────────────────
+  startSealingMinigame(onSuccess) {
+    this.minigameActive = true;
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:60',
+      'background:rgba(0,0,0,0.88)',
+      'display:flex', 'flex-direction:column',
+      'align-items:center', 'justify-content:center', 'gap:14px',
+    ].join(';');
+
+    const title = document.createElement('div');
+    title.textContent = 'Seal the Letters';
+    title.style.cssText = 'font-family:Cinzel,serif;color:#c9a84c;font-size:1.5rem;font-weight:700;letter-spacing:0.1em;text-shadow:0 0 12px rgba(201,168,76,0.5);';
+    overlay.appendChild(title);
+
+    const instr = document.createElement('div');
+    instr.textContent = 'Press [E] / Tap when the seal stamp touches the target!';
+    instr.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f0e0b0;font-size:1rem;';
+    overlay.appendChild(instr);
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = 300;
+    canvas.height = 220;
+    canvas.style.cssText = 'border:2px solid #c9a84c;border-radius:8px;cursor:pointer;touch-action:none;';
+    overlay.appendChild(canvas);
+
+    const status = document.createElement('div');
+    status.style.cssText = 'font-family:Cinzel,serif;color:#a07830;font-size:0.9rem;letter-spacing:0.05em;min-height:1.2em;';
+    overlay.appendChild(status);
+
+    document.body.appendChild(overlay);
+
+    const ctx  = canvas.getContext('2d');
+    const W = 300, H = 220;
+    const targets  = [70, 150, 230];   // x positions of 3 seal spots
+    const TARGET_Y = 160;
+    let sealed = 0, phase = 0, done = false, rafId = null;
+
+    const draw = () => {
+      if (done) return;
+      phase += 0.045;
+      const stampX = targets[sealed] || W / 2;
+      const stampY = 30 + Math.abs(Math.sin(phase * 2.2)) * 145;
+      const onTarget = stampY > TARGET_Y - 18;
+
+      // Parchment
+      ctx.fillStyle = '#f0e6b8';
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = '#b8902a';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(8, 8, W - 16, H - 16);
+
+      // Header text
+      ctx.fillStyle = '#5a2e08';
+      ctx.font = 'bold 10px Cinzel, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u2014 By Authority of the Sanhedrin \u2014', W / 2, 22);
+
+      // Ruled lines (letter body)
+      ctx.fillStyle = 'rgba(100,60,10,0.15)';
+      for (let i = 0; i < 6; i++) ctx.fillRect(18, 32 + i * 16, W - 36, 7);
+
+      // Seal target circles
+      for (let i = 0; i < 3; i++) {
+        const tx = targets[i];
+        if (i < sealed) {
+          // Sealed — dark red wax
+          ctx.fillStyle = '#7a1010';
+          ctx.beginPath(); ctx.arc(tx, TARGET_Y, 15, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#d4a030'; ctx.lineWidth = 1.5;
+          for (let r = 0; r < 6; r++) {
+            const a = (r / 6) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(tx, TARGET_Y);
+            ctx.lineTo(tx + Math.cos(a) * 11, TARGET_Y + Math.sin(a) * 11);
+            ctx.stroke();
+          }
+          ctx.fillStyle = '#d4a030';
+          ctx.font = 'bold 9px Cinzel, serif';
+          ctx.fillText('\u2605', tx, TARGET_Y + 4);
+        } else if (i === sealed) {
+          // Active target
+          ctx.fillStyle = onTarget ? 'rgba(180,40,40,0.25)' : 'rgba(180,130,40,0.18)';
+          ctx.beginPath(); ctx.arc(tx, TARGET_Y, 16, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = onTarget ? '#e04040' : '#c0902a';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(tx, TARGET_Y, 14, 0, Math.PI * 2); ctx.stroke();
+        } else {
+          ctx.strokeStyle = 'rgba(140,90,20,0.28)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(tx, TARGET_Y, 14, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+
+      // Stamp tool
+      if (sealed < 3) {
+        ctx.fillStyle = '#4a2008';
+        ctx.fillRect(stampX - 9, stampY - 30, 18, 24);
+        ctx.fillStyle = onTarget ? '#c02020' : '#8b1818';
+        ctx.beginPath(); ctx.arc(stampX, stampY, 11, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#d4a030'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(stampX, stampY, 7, 0, Math.PI * 2); ctx.stroke();
+      }
+
+      // Progress
+      ctx.fillStyle = '#5a2e08';
+      ctx.font = '10px Cinzel, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Seals: ' + sealed + ' / 3', W / 2, H - 8);
+
+      rafId = requestAnimationFrame(draw);
+    };
+
+    const tryStamp = () => {
+      if (done || sealed >= 3) return;
+      const stampY = 30 + Math.abs(Math.sin(phase * 2.2)) * 145;
+      if (stampY > TARGET_Y - 18) {
+        sealed++;
+        if (sealed >= 3) {
+          done = true;
+          cancelAnimationFrame(rafId);
+          // Final render showing all sealed
+          phase = Math.PI / 2 * 2.2; // force stamp down
+          draw();
+          status.textContent = 'Letters sealed with the authority of the Sanhedrin!';
+          status.style.color = '#80c060';
+          setTimeout(() => {
+            overlay.remove();
+            this.minigameActive = false;
+            onSuccess();
+          }, 1100);
+        }
+      } else {
+        canvas.style.borderColor = '#ff5040';
+        status.textContent = 'Not yet \u2014 wait for the stamp to reach the seal!';
+        status.style.color = '#c04040';
+        setTimeout(() => {
+          canvas.style.borderColor = '#c9a84c';
+          status.textContent = '';
+        }, 700);
+      }
+    };
+
+    canvas.addEventListener('pointerdown', tryStamp);
+    const keyH = (e) => {
+      if (e.key === 'e' || e.key === 'E' || e.key === ' ') { e.preventDefault(); tryStamp(); }
+      if (e.key === 'Escape') {
+        done = true; cancelAnimationFrame(rafId);
+        overlay.remove(); this.minigameActive = false;
+        window.removeEventListener('keydown', keyH);
+        onSuccess(); // skip minigame on Escape
+      }
+      if (done) window.removeEventListener('keydown', keyH);
+    };
+    window.addEventListener('keydown', keyH);
+    requestAnimationFrame(draw);
+  },
+
   startWeavingMinigame(onSuccess, onFail) {
     this.minigameActive = true;
 

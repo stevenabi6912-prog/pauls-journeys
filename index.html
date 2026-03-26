@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Paul's Journeys — A Biblical RPG</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link href="style.css" rel="stylesheet">
+  <link href="style.css?v=3" rel="stylesheet">
 </head>
 <body>
   <canvas id="game-canvas"></canvas>
@@ -49,10 +49,15 @@
   <!-- Interact prompt (desktop) -->
   <div id="interact-prompt" class="hidden">[E] Talk</div>
 
-  <!-- Quest arrow hint (shown at game start) -->
-  <div id="quest-arrow" class="hidden">
-    <div id="qa-arrow">&#9650;</div>
-    <div id="qa-text">Head North &mdash; Find the High Priest</div>
+  <!-- Quest popup (dismissible milestone card) -->
+  <div id="quest-popup" class="hidden">
+    <div id="quest-popup-inner">
+      <div id="qp-label">NEW QUEST</div>
+      <div id="qp-title"></div>
+      <div id="qp-body"></div>
+      <div id="qp-verse"></div>
+      <button id="qp-dismiss">Continue</button>
+    </div>
   </div>
 
   <!-- Satchel popup -->
@@ -115,7 +120,7 @@
   <div id="mobile-controls">
     <!-- Action buttons — bottom LEFT -->
     <div id="action-buttons">
-      <button id="jump-btn">
+      <button id="jump-btn" style="display:none">
         <span id="jump-icon">&#8679;</span>
         <span id="jump-label">Jump</span>
       </button>
@@ -130,6 +135,25 @@
         <div id="joystick-thumb"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Runner HUD (Damascus Road runner mode) -->
+  <div id="runner-hud" class="hidden">
+    <div id="runner-lives">
+      <span class="r-heart" id="rh-1">&#9829;</span>
+      <span class="r-heart" id="rh-2">&#9829;</span>
+      <span class="r-heart" id="rh-3">&#9829;</span>
+    </div>
+    <div id="runner-bar-wrap">
+      <div id="runner-bar-fill"></div>
+      <span id="runner-bar-label">Damascus</span>
+    </div>
+  </div>
+
+  <!-- Runner lane buttons (mobile) -->
+  <div id="runner-btns" class="hidden">
+    <button id="rb-left">&#9664;</button>
+    <button id="rb-right">&#9654;</button>
   </div>
 
   <!-- Blind overlay (Paul's blindness on the Damascus road) -->
