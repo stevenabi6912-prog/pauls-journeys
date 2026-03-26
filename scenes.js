@@ -242,9 +242,9 @@ var WORLD = {
       bodyColor: 0xb06080, accentColor: 0xe090b0, headColor: 0xb07840,
       trueName: 'Miriam',
       dialogues: [
-        { speaker: 'Miriam', text: '"Shalom! I sell the finest tent cloth in Jerusalem — strong enough for any desert camp."' },
-        { speaker: 'Miriam', text: '"Once you have cloth, take it south to Benjamin the Weaver near the stables. He will craft it into a fine tent you can sell."' },
-        { speaker: 'Miriam', text: '"One bolt of cloth is 2 shekels. Shall I wrap one up for you?"' },
+        { speaker: 'Miriam', text: '"Shalom, traveler. My family has traded cloth in this market for three generations — woven strong enough to shelter a man through any desert wind."' },
+        { speaker: 'Miriam', text: '"Bring my cloth south to Benjamin the Weaver near the stables. He will turn it into a proper tent. The caravans heading north pay well for a good one."' },
+        { speaker: 'Miriam', text: '"Two shekels a bolt. Three bolts makes a full tent — the wiser purchase if you mean to turn a profit. What will it be?"' },
       ],
       onComplete: 'offer_cloth',
     },
