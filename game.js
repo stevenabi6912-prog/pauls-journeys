@@ -101,8 +101,10 @@ const Game = {
   runnerInvincible:  0,
   runnerFinished:    false,
   runnerObstacles:   [],        // { mesh, laneX, z, type }
-  runnerCoins:       [],        // { mesh, laneX, z }
+  runnerCoins:       [],        // { mesh, laneX, z, elevated }
   runnerRoadMeshes:  [],        // road chunks to despawn
+  runnerHorse:       null,
+  runnerPaulRider:   null,
   runnerNextZ:       30,        // next z to spawn content
   runnerLanePrevJoy: false,     // edge-detect joystick lane input
 
@@ -1225,6 +1227,7 @@ const Game = {
       // Recruited followers can't be talked to — they're marching with you
       if (this.recruitedNPCs[id]) continue;
       const obj = this.npcObjects[id];
+      if (!obj.group.visible) continue; // arrested / hidden NPCs
       const dx  = px - obj.group.position.x;
       const dz  = pz - obj.group.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
@@ -1786,7 +1789,6 @@ const Game = {
           'Head north through the market to the Holy Temple. Speak with Caiaphas, the High Priest, and receive your letters of passage.',
           '— Acts 9:1'
         );
-        this.initAmbientSound();
       }, 1200);
       ov.removeEventListener('click', dismiss);
       ov.removeEventListener('touchend', dismiss);
@@ -1858,7 +1860,11 @@ const Game = {
       ov.style.background = 'rgba(0,0,0,0)';
       ov.style.opacity    = '0';
       this.cutsceneActive = false;
-      setTimeout(() => { if (ov.parentNode) ov.remove(); }, 1500);
+      setTimeout(() => {
+        if (ov.parentNode) ov.remove();
+        this.damascusTriggered = false;
+        this.triggerDamascusRoad();
+      }, 1500);
     }, 5500);
   },
 
@@ -2605,9 +2611,9 @@ const Game = {
       if (!child.isLight) toRemove.push(child);
     }
     toRemove.forEach(o => this.scene.remove(o));
+    this.scene.add(this.playerGroup); // playerGroup was in toRemove — put it back
 
     // Clear Jerusalem systems
-    this.stopAmbientSound();
     this.npcPatrolStates = {};
     for (const d of this.dustParticles) { d.mesh.geometry.dispose(); d.mesh.material.dispose(); }
     this.dustParticles = [];
@@ -2646,6 +2652,7 @@ const Game = {
 
     // Build initial road
     this.buildRunnerStart();
+    this.mountPlayerOnHorse();
     this.initRunnerControls();
 
     // HUD
@@ -2662,6 +2669,61 @@ const Game = {
       'Dodge travelers and soldiers. Jump over rocks and fallen logs. Reach Damascus before nightfall.',
       '— Acts 9:3'
     );
+  },
+
+  // ── MOUNT PAUL ON HORSE ───────────────────────────────────
+  mountPlayerOnHorse() {
+    if (this.runnerHorse) return;
+
+    // Lift Paul's existing mesh into a rider sub-group
+    const rider = new THREE.Group();
+    rider.position.y = 0.82;
+    while (this.playerGroup.children.length) {
+      rider.add(this.playerGroup.children[0]);
+    }
+    this.playerGroup.add(rider);
+    this.runnerPaulRider = rider;
+
+    // Build horse mesh
+    const g   = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x2e1408, roughness: 0.85 });
+    const mat2= new THREE.MeshStandardMaterial({ color: 0x200e04, roughness: 0.85 });
+
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.44, 1.7, 8), mat);
+    body.rotation.z = Math.PI / 2;
+    body.position.set(0, 0.6, 0);
+
+    const rump = new THREE.Mesh(new THREE.SphereGeometry(0.38, 7, 5), mat.clone());
+    rump.scale.set(0.7, 0.72, 0.9);
+    rump.position.set(-0.75, 0.78, 0);
+
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.72, 7), mat.clone());
+    neck.rotation.z = -0.52;
+    neck.position.set(0.82, 1.0, 0);
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.3, 0.26), mat.clone());
+    head.position.set(1.22, 1.3, 0);
+
+    const muzz = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, 0.2), mat2.clone());
+    muzz.position.set(1.48, 1.18, 0);
+
+    const mane = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.14, 0.1), mat2.clone());
+    mane.position.set(0.2, 1.02, 0);
+
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.10, 0.48, 6), mat2.clone());
+    tail.rotation.z = 0.45;
+    tail.position.set(-1.05, 0.64, 0);
+
+    [[-0.52,-0.18],[-0.52,0.18],[0.42,-0.18],[0.42,0.18]].forEach(([lx,lz]) => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.58, 6), mat.clone());
+      leg.position.set(lx, 0.29, lz);
+      g.add(leg);
+    });
+
+    g.add(body); g.add(rump); g.add(neck); g.add(head); g.add(muzz); g.add(mane); g.add(tail);
+    g.rotation.y = Math.PI / 2; // align horse length with road direction
+    this.playerGroup.add(g);
+    this.runnerHorse = g;
   },
 
   // ── BUILD DAMASCUS ROAD ENVIRONMENT ───────────────────────
