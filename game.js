@@ -2298,8 +2298,8 @@ const Game = {
       const jy = Math.sin(this.joy.angle);
       if (!this.runnerLanePrevJoy) {
         this.runnerLanePrevJoy = true;
-        if (jx > 0.5  && this.runnerTargetLane < 2) this.runnerTargetLane++;
-        else if (jx < -0.5 && this.runnerTargetLane > 0) this.runnerTargetLane--;
+        if (jx > 0.5  && this.runnerTargetLane > 0) this.runnerTargetLane--;
+        else if (jx < -0.5 && this.runnerTargetLane < 2) this.runnerTargetLane++;
         else if (jy < -0.5 && !this.runnerJumping) this.startRunnerJump();
       }
     } else {
@@ -2446,8 +2446,8 @@ const Game = {
   initRunnerControls() {
     this._runnerKeyDown = (e) => {
       if (!this.runnerActive || this.runnerFinished) return;
-      if (e.key === 'ArrowLeft'  && this.runnerTargetLane > 0) { e.preventDefault(); this.runnerTargetLane--; }
-      if (e.key === 'ArrowRight' && this.runnerTargetLane < 2) { e.preventDefault(); this.runnerTargetLane++; }
+      if (e.key === 'ArrowLeft'  && this.runnerTargetLane < 2) { e.preventDefault(); this.runnerTargetLane++; }
+      if (e.key === 'ArrowRight' && this.runnerTargetLane > 0) { e.preventDefault(); this.runnerTargetLane--; }
       if ((e.key === 'ArrowUp' || e.key === ' ') && !this.runnerJumping && !this.dialogueActive) {
         e.preventDefault(); this.startRunnerJump();
       }
@@ -2463,8 +2463,8 @@ const Game = {
       const dx = e.changedTouches[0].clientX - sx;
       const dy = e.changedTouches[0].clientY - sy;
       if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 25) {
-        if (dx < 0 && this.runnerTargetLane > 0) this.runnerTargetLane--;
-        if (dx > 0 && this.runnerTargetLane < 2) this.runnerTargetLane++;
+        if (dx < 0 && this.runnerTargetLane < 2) this.runnerTargetLane++;
+        if (dx > 0 && this.runnerTargetLane > 0) this.runnerTargetLane--;
       } else if (dy < -25 && !this.runnerJumping) {
         this.startRunnerJump();
       }
@@ -2475,8 +2475,8 @@ const Game = {
     // Lane buttons
     const bl = document.getElementById('rb-left');
     const br = document.getElementById('rb-right');
-    if (bl) bl.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane > 0) this.runnerTargetLane--; }, { passive: false });
-    if (br) br.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane < 2) this.runnerTargetLane++; }, { passive: false });
+    if (bl) bl.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane < 2) this.runnerTargetLane++; }, { passive: false });
+    if (br) br.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane > 0) this.runnerTargetLane--; }, { passive: false });
 
     // Jump button
     const jb = document.getElementById('jump-btn');
