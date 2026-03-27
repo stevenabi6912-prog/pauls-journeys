@@ -2056,6 +2056,7 @@ const Game = {
       else if (r < 0.73) this.spawnObs('pillar', rl(), z);
       else if (r < 0.82) this.spawnObs('boulder', 1, z);
       else if (r < 0.91) { this.spawnObs('camel', 0, z); this.spawnObs('thorn', 2, z); }
+      else if (r < 0.96) this.spawnObs('gap', 1, z);
       else { this.spawnObs('rock', rl(), z); this.spawnObs('person', rl(), z + 8); }
 
     } else {
@@ -2069,6 +2070,7 @@ const Game = {
       else if (r < 0.71) { this.spawnObs('pillar', 1, z);  this.spawnObs('camel', Math.random() < 0.5 ? 0 : 2, z + 9); }
       else if (r < 0.80) { this.spawnObs('log', 0, z);     this.spawnObs('log', 1, z); this.spawnObs('person', 2, z + 7); }
       else if (r < 0.90) { this.spawnObs('cart', 1, z);    this.spawnObs('rock', 0, z + 5); }
+      else if (r < 0.96) this.spawnObs('gap', 1, z);
       else { this.spawnObs('boulder', rl(), z); this.spawnObs('rock', rl(), z + 10); }
     }
   },
@@ -2176,6 +2178,16 @@ const Game = {
       mesh.rotation.z = Math.PI / 2;
       mesh.position.set(lx, 0.34, z);
       mesh._clearJumpY = 0.55;
+
+    } else if (type === 'gap') {
+      // Full-road gap — spans all three lanes, must jump to cross
+      mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(5.8, 0.08, 1.6),
+        new THREE.MeshStandardMaterial({ color: 0x160a02, roughness: 1.0 })
+      );
+      mesh.position.set(0, 0.02, z);
+      mesh._isFullGap  = true;
+      mesh._clearJumpY = 0.30;
 
     } else { // boulder
       mesh = new THREE.Mesh(
@@ -2333,11 +2345,20 @@ const Game = {
 
     for (const obs of this.runnerObstacles) {
       const dz = Math.abs(pz - obs.z);
+
+      // Full-gap obstacle: spans all lanes, must jump over it
+      if (obs.mesh._isFullGap) {
+        if (dz < 0.75 && this.runnerJumpY < obs.mesh._clearJumpY) {
+          this.hitRunner(); return;
+        }
+        continue;
+      }
+
       const dx = Math.abs(px - obs.laneX);
       if (dz < 1.0 && dx < 1.1) {
-        // Jumpable obstacles: clear if high enough
-        if (obs._clearJumpY !== undefined && obs._clearJumpY < 999) {
-          if (this.runnerJumpY > obs._clearJumpY + 0.05) continue;
+        // Jumpable obstacles: clear if player is high enough
+        if (obs.mesh._clearJumpY !== undefined && obs.mesh._clearJumpY < 999) {
+          if (this.runnerJumpY > obs.mesh._clearJumpY + 0.05) continue;
         }
         this.hitRunner();
         return;
@@ -2530,75 +2551,21 @@ const Game = {
       quote.style.opacity = '1';
     }, 2800);
 
-    // Flash white — Damascus Road light
+    // Fade to black then load Damascus Road
     setTimeout(() => {
-      overlay.style.transition = 'background 0.15s ease';
-      overlay.style.background = 'rgba(255,255,255,1)';
-    }, 4000);
-
-    // Damascus Road revelation
-    setTimeout(() => {
-      // Clear overlay contents
-      while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
-
-      const flash = document.createElement('div');
-      flash.style.cssText = [
-        'display:flex',
-        'flex-direction:column',
-        'align-items:center',
-        'justify-content:center',
-        'gap:24px',
-        'opacity:0',
-        'transition:opacity 0.8s ease',
-      ].join(';');
-
-      const lightning = document.createElement('div');
-      lightning.textContent = '\u26a1 A LIGHT FROM HEAVEN \u26a1';
-      lightning.style.cssText = [
-        'font-family:Cinzel,serif',
-        'font-weight:700',
-        'font-size:clamp(1.2rem,3.5vw,2rem)',
-        'color:#1a0800',
-        'letter-spacing:0.12em',
-        'text-shadow:none',
-      ].join(';');
-      flash.appendChild(lightning);
-
-      const verse = document.createElement('div');
-      verse.textContent = '"Saul, Saul, why persecutest thou me?" \u2014 Acts 9:4';
-      verse.style.cssText = [
-        'font-family:Crimson Text,Georgia,serif',
-        'font-style:italic',
-        'font-size:clamp(1rem,2.5vw,1.3rem)',
-        'color:#2a0800',
-        'max-width:500px',
-        'line-height:1.7',
-        'text-align:center',
-      ].join(';');
-      flash.appendChild(verse);
-
-      overlay.appendChild(flash);
-
-      requestAnimationFrame(() => {
-        flash.style.opacity = '1';
-      });
-
-      // After encounter flash, transition to Damascus Road level
+      overlay.style.transition = 'background 1.5s ease';
+      overlay.style.background = 'rgba(0,0,0,1)';
       setTimeout(() => {
-        overlay.style.transition = 'background 1.8s ease';
-        overlay.style.background = 'rgba(0,0,0,1)';
-        setTimeout(() => {
-          if (overlay.parentNode) overlay.remove();
-          this.loadDamascusRoad();
-          // Fade in from black
-          const fadeIn = document.createElement('div');
-          fadeIn.style.cssText = 'position:fixed;inset:0;z-index:95;background:rgba(0,0,0,1);pointer-events:none;transition:opacity 2s ease;';
-          document.body.appendChild(fadeIn);
-          requestAnimationFrame(() => { fadeIn.style.opacity = '0'; });
-          setTimeout(() => { if (fadeIn.parentNode) fadeIn.remove(); }, 2100);
-        }, 1900);
-      }, 3200);
-    }, 4200);
+        if (overlay.parentNode) overlay.remove();
+        this.loadDamascusRoad();
+        // Fade in from black
+        const fadeIn = document.createElement('div');
+        fadeIn.style.cssText = 'position:fixed;inset:0;z-index:95;background:rgba(0,0,0,1);pointer-events:none;transition:opacity 2s ease;';
+        document.body.appendChild(fadeIn);
+        requestAnimationFrame(() => { fadeIn.style.opacity = '0'; });
+        setTimeout(() => { if (fadeIn.parentNode) fadeIn.remove(); }, 2100);
+      }, 1600);
+    }, 3500);
   },
 
   // ── LOAD DAMASCUS ROAD LEVEL ──────────────────────────────
