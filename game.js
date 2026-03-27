@@ -2253,7 +2253,7 @@ const Game = {
     this.playerGroup.position.x = this.player.pos.x;
     this.playerGroup.position.z = this.player.pos.z;
     this.playerGroup.position.y = this.runnerJumpY;
-    this.playerGroup.rotation.y = Math.PI; // face forward
+    this.playerGroup.rotation.y = 0; // Paul's nose faces +Z naturally — no flip needed
 
     // ── Camera
     this.updateRunnerCamera(dt);
@@ -2645,6 +2645,7 @@ const Game = {
     // Lift Paul's existing mesh into a rider sub-group
     const rider = new THREE.Group();
     rider.position.y = 0.82;
+    // No extra rotation — playerGroup.rotation.y = Math.PI already faces Paul forward
     while (this.playerGroup.children.length) {
       rider.add(this.playerGroup.children[0]);
     }
@@ -2688,7 +2689,7 @@ const Game = {
     });
 
     g.add(body); g.add(rump); g.add(neck); g.add(head); g.add(muzz); g.add(mane); g.add(tail);
-    g.rotation.y = Math.PI / 2; // align horse length with road direction
+    g.rotation.y = -Math.PI / 2; // align horse head to face +Z (direction of travel)
     this.playerGroup.add(g);
     this.runnerHorse = g;
   },
