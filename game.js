@@ -2283,7 +2283,7 @@ const Game = {
     // ── Collect / despawn coins
     this.runnerCoins = this.runnerCoins.filter(c => {
       if (c.z < pz - 10) { this.scene.remove(c.mesh); return false; }
-      if (Math.abs(pz - c.z) < 0.85 && Math.abs(px - c.laneX) < 0.95) {
+      if (Math.abs(pz - c.z) < 0.85 && Math.abs(this.player.pos.x - c.laneX) < 0.95) {
         this.scene.remove(c.mesh);
         this.inventory.shekels++;
         this.updateInventoryHUD();
@@ -2528,7 +2528,7 @@ const Game = {
 
     // Quote
     const quote = document.createElement('div');
-    quote.textContent = '"And as he journeyed, he came near Damascus: and suddenly there shined round about him a light from heaven." \u2014 Acts 9:3';
+    quote.textContent = '"And Saul, yet breathing out threatenings and slaughter against the disciples of the Lord, went unto the high priest, and desired of him letters to Damascus." \u2014 Acts 9:1\u20132';
     quote.style.cssText = [
       'font-family:Crimson Text,Georgia,serif',
       'font-style:italic',

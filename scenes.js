@@ -179,7 +179,7 @@ var WORLD = {
 
     // ── Temple Soldiers (become companions after letters) ────
     {
-      id: 'barnabas', name: 'Temple Soldier', trueName: 'Barnabas',
+      id: 'barnabas', name: 'Temple Soldier', trueName: 'Marcus',
       x: -15.5, z: 22,
       bodyColor: 0x5a4a3a, accentColor: 0x8a6a40, headColor: 0xb07840,
       dialogues: [
@@ -187,8 +187,8 @@ var WORLD = {
         { speaker: 'Temple Soldier', text: '"By order of the Sanhedrin, no disturbances in the Temple district. Go about your business."' },
       ],
       dialoguesAlt: [
-        { speaker: 'Barnabas', text: '"Saul! I have heard you carry letters for Damascus. It is a long road to travel without companions."' },
-        { speaker: 'Barnabas', text: '"I will join you on this mission. My family has connections in Damascus \u2014 I know the road well. Count me in." He grips your arm in agreement.' },
+        { speaker: 'Marcus', text: '"Saul! I have heard you carry letters for Damascus. It is a long road to travel without companions."' },
+        { speaker: 'Marcus', text: '"I will join you on this mission. My family has connections in Damascus \u2014 I know the road well. Count me in." He grips your arm in agreement.' },
       ],
       onComplete: 'recruit_companion',
     },
@@ -207,7 +207,7 @@ var WORLD = {
       onComplete: 'recruit_companion',
     },
     {
-      id: 'silas', name: 'Temple Soldier', trueName: 'Silas',
+      id: 'silas', name: 'Temple Soldier', trueName: 'Doran',
       x: 16, z: 18,
       bodyColor: 0x4a5040, accentColor: 0x7a7060, headColor: 0xb08060,
       dialogues: [
@@ -215,8 +215,8 @@ var WORLD = {
         { speaker: 'Temple Soldier', text: '"The Temple guard keeps order in these streets. Stay on the road and cause no trouble."' },
       ],
       dialoguesAlt: [
-        { speaker: 'Silas', text: '"The Damascus road? I know it well \u2014 my family is from there. Three days through Judea and into Syria."' },
-        { speaker: 'Silas', text: '"It has been too long since I\'ve seen Damascus. I will join your company, Saul. The journey will be safer with more men."' },
+        { speaker: 'Doran', text: '"The Damascus road? I know it well \u2014 my family is from there. Three days through Judea and into Syria."' },
+        { speaker: 'Doran', text: '"It has been too long since I\'ve seen Damascus. I will join your company, Saul. The journey will be safer with more men."' },
       ],
       onComplete: 'recruit_companion',
     },
