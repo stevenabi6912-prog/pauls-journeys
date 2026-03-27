@@ -107,6 +107,16 @@ const Game = {
   runnerPaulRider:   null,
   runnerNextZ:       30,        // next z to spawn content
   runnerLanePrevJoy: false,     // edge-detect joystick lane input
+  runnerShake:       0,         // camera shake intensity
+  runnerSlowed:      0,         // slow timer (sand dune effect)
+  runnerDoubleCoin:  0,         // double coin timer
+  runnerMultiplier:  1,         // score multiplier
+  runnerMultiplierTimer: 0,     // time since last coin
+  runnerMilestones:  [30, 60, 90], // biblical quote milestones (seconds)
+  runnerMilestonePrev: 0,       // last milestone check time
+  runnerDustParticles: [],      // dust particle meshes behind horse
+  runnerAmbientLight: null,     // ambient light ref for end-sequence
+  runnerEndLight:    null,      // growing white light near end
 
   // ── DOM REFS ──────────────────────────────────────────────
   elDialogueBox:    null,
@@ -2022,8 +2032,24 @@ const Game = {
     // Scatter shekels — reward for safe gaps
     if (Math.random() < 0.42) {
       const cLane = Math.floor(Math.random() * 3);
-      this.spawnCoin(cLane, z + 3 + Math.random() * 5);
-      if (Math.random() < 0.35) this.spawnCoin(cLane, z + 9 + Math.random() * 3);
+      const arcZ  = z + 3 + Math.random() * 4;
+      if (Math.random() < 0.30) {
+        // Coin arc: 5 coins in a curve — jump to collect
+        const arcYs = [0.58, 1.4, 2.2, 1.4, 0.58];
+        for (let ai = 0; ai < 5; ai++) {
+          this.spawnCoin(cLane, arcZ + ai * 1.5, arcYs[ai]);
+        }
+      } else {
+        this.spawnCoin(cLane, arcZ);
+        if (Math.random() < 0.35) this.spawnCoin(cLane, z + 9 + Math.random() * 3);
+      }
+    }
+
+    // Rare power-up coins (~15% per chunk)
+    if (Math.random() < 0.15) {
+      const puLane = Math.floor(Math.random() * 3);
+      const puZ    = z + 6 + Math.random() * 8;
+      this.spawnPowerup(puLane, puZ);
     }
 
     this.runnerNextZ += 12 + Math.random() * 6;
@@ -2035,42 +2061,45 @@ const Game = {
     const rl = () => Math.floor(Math.random() * 3);
 
     if (phase === 0) {
-      // Easy: single obstacles with generous gaps
-      if      (r < 0.18) this.spawnObs('rock',   rl(), z);
-      else if (r < 0.32) this.spawnObs('thorn',  rl(), z);
-      else if (r < 0.45) this.spawnObs('person', 1, z);
-      else if (r < 0.56) this.spawnObs('person', Math.random() < 0.5 ? 0 : 2, z);
-      else if (r < 0.67) this.spawnObs('cart',   rl(), z);
-      else if (r < 0.78) this.spawnObs('camel',  rl(), z);
-      else if (r < 0.88) this.spawnObs('log',    rl(), z);
-      // else gap
+      // Easy: single obstacles with generous gaps — always leave at least one lane open
+      if      (r < 0.10) this.spawnObs('dune',   rl(), z);
+      else if (r < 0.22) this.spawnObs('rock',   rl(), z);
+      else if (r < 0.34) this.spawnObs('thorn',  rl(), z);
+      else if (r < 0.45) this.spawnObs('person', rl(), z);   // random lane, not always center
+      else if (r < 0.55) this.spawnObs('person', rl(), z);
+      else if (r < 0.65) this.spawnObs('cart',   rl(), z);
+      else if (r < 0.76) this.spawnObs('camel',  rl(), z);
+      else if (r < 0.86) this.spawnObs('log',    rl(), z);
+      // else open road
 
     } else if (phase === 1) {
-      // Medium: two-obstacle combos, more pressure
-      if      (r < 0.13) { this.spawnObs('rock', 0, z); this.spawnObs('rock', 2, z); }
-      else if (r < 0.24) this.spawnObs('soldier', rl(), z);
-      else if (r < 0.35) { this.spawnObs('log', 0, z); this.spawnObs('log', 1, z); }
-      else if (r < 0.46) { this.spawnObs('log', 1, z); this.spawnObs('log', 2, z); }
-      else if (r < 0.55) this.spawnObs('camel', 1, z);   // center camel — dodge
-      else if (r < 0.64) { this.spawnObs('cart', Math.random() < 0.5 ? 0 : 2, z); this.spawnObs('thorn', 1, z); }
-      else if (r < 0.73) this.spawnObs('pillar', rl(), z);
-      else if (r < 0.82) this.spawnObs('boulder', 1, z);
-      else if (r < 0.91) { this.spawnObs('camel', 0, z); this.spawnObs('thorn', 2, z); }
-      else if (r < 0.96) this.spawnObs('gap', 1, z);
+      // Medium: two-obstacle combos — leave center lane available more often
+      if      (r < 0.08) this.spawnObs('dune',   rl(), z);
+      else if (r < 0.18) { this.spawnObs('rock', 0, z); this.spawnObs('rock', 2, z); }   // center is clear
+      else if (r < 0.28) this.spawnObs('soldier', rl(), z);
+      else if (r < 0.37) { this.spawnObs('log', 0, z); this.spawnObs('thorn', 2, z); }   // center clear
+      else if (r < 0.46) { this.spawnObs('log', 2, z); this.spawnObs('thorn', 0, z); }   // center clear
+      else if (r < 0.54) this.spawnObs('camel',  rl(), z);   // random lane now
+      else if (r < 0.63) { this.spawnObs('cart', Math.random() < 0.5 ? 0 : 2, z); this.spawnObs('thorn', rl(), z); }
+      else if (r < 0.71) this.spawnObs('pillar', rl(), z);
+      else if (r < 0.79) this.spawnObs('boulder', rl(), z);  // random, not always center
+      else if (r < 0.88) { this.spawnObs('camel', 0, z); this.spawnObs('rock', 2, z); }  // center clear
+      else if (r < 0.95) this.spawnObs('gap', 1, z);
       else { this.spawnObs('rock', rl(), z); this.spawnObs('person', rl(), z + 8); }
 
     } else {
-      // Hard: tight combos, camels + soldiers, falling pillars
-      if      (r < 0.12) { this.spawnObs('rock', 0, z);    this.spawnObs('rock', 1, z); }
-      else if (r < 0.22) { this.spawnObs('camel', 1, z);   this.spawnObs('rock', 0, z); }
-      else if (r < 0.32) { this.spawnObs('camel', 1, z);   this.spawnObs('thorn', 2, z); }
-      else if (r < 0.42) { this.spawnObs('soldier', 0, z); this.spawnObs('rock', 2, z); }
-      else if (r < 0.52) { this.spawnObs('soldier', 2, z); this.spawnObs('rock', 0, z); }
-      else if (r < 0.62) { this.spawnObs('cart', 0, z);    this.spawnObs('soldier', 2, z); }
-      else if (r < 0.71) { this.spawnObs('pillar', 1, z);  this.spawnObs('camel', Math.random() < 0.5 ? 0 : 2, z + 9); }
-      else if (r < 0.80) { this.spawnObs('log', 0, z);     this.spawnObs('log', 1, z); this.spawnObs('person', 2, z + 7); }
-      else if (r < 0.90) { this.spawnObs('cart', 1, z);    this.spawnObs('rock', 0, z + 5); }
-      else if (r < 0.96) this.spawnObs('gap', 1, z);
+      // Hard: tight combos — force side lanes, keep center survivable
+      if      (r < 0.07) this.spawnObs('dune',   rl(), z);
+      else if (r < 0.17) { this.spawnObs('rock', 0, z);    this.spawnObs('rock', 2, z); }   // center clear
+      else if (r < 0.26) { this.spawnObs('camel', rl(), z); this.spawnObs('rock', 0, z); }
+      else if (r < 0.35) { this.spawnObs('soldier', 0, z); this.spawnObs('thorn', 2, z); }  // center clear
+      else if (r < 0.44) { this.spawnObs('soldier', 0, z); this.spawnObs('rock', 2, z); }   // center clear
+      else if (r < 0.53) { this.spawnObs('soldier', 2, z); this.spawnObs('rock', 0, z); }   // center clear
+      else if (r < 0.62) { this.spawnObs('cart', 0, z);    this.spawnObs('soldier', 2, z); }// center clear
+      else if (r < 0.70) { this.spawnObs('pillar', rl(), z); this.spawnObs('camel', Math.random() < 0.5 ? 0 : 2, z + 9); }
+      else if (r < 0.79) { this.spawnObs('log', 0, z);     this.spawnObs('person', 2, z + 7); }  // center clear
+      else if (r < 0.88) { this.spawnObs('cart', rl(), z); this.spawnObs('rock', 0, z + 5); }
+      else if (r < 0.95) this.spawnObs('gap', 1, z);
       else { this.spawnObs('boulder', rl(), z); this.spawnObs('rock', rl(), z + 10); }
     }
   },
@@ -2189,6 +2218,16 @@ const Game = {
       mesh._isFullGap  = true;
       mesh._clearJumpY = 0.30;
 
+    } else if (type === 'dune') {
+      // Sand dune — can't jump over, must dodge; slows Paul on contact
+      mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.9, 6, 4),
+        new THREE.MeshStandardMaterial({ color: 0xd4a855, roughness: 1.0 })
+      );
+      mesh.scale.set(1, 0.45, 1.2);
+      mesh.position.set(lx, 0, z);
+      mesh._clearJumpY = 999;  // can't jump; handled separately in collision
+
     } else { // boulder
       mesh = new THREE.Mesh(
         new THREE.SphereGeometry(0.75, 7, 6),
@@ -2205,16 +2244,31 @@ const Game = {
   },
 
   // ── RUNNER: SPAWN SHEKEL COIN ──────────────────────────────
-  spawnCoin(lane, z) {
+  spawnCoin(lane, z, y) {
     const lx   = this.runnerLaneX[lane];
+    const coinY = (y !== undefined) ? y : 0.58;
     const coin = new THREE.Mesh(
       new THREE.CylinderGeometry(0.21, 0.21, 0.07, 10),
       new THREE.MeshStandardMaterial({ color: 0xf5c018, roughness: 0.2, metalness: 0.65, emissive: 0xc09010, emissiveIntensity: 0.45 })
     );
     coin.rotation.x = Math.PI / 2;   // lie flat like a coin
-    coin.position.set(lx, 0.58, z);
+    coin.position.set(lx, coinY, z);
     this.scene.add(coin);
     this.runnerCoins.push({ mesh: coin, laneX: lx, z });
+  },
+
+  // ── RUNNER: SPAWN POWER-UP COIN ────────────────────────────
+  spawnPowerup(lane, z) {
+    const lx  = this.runnerLaneX[lane];
+    const isStar = Math.random() < 0.5;
+    const mat = isStar
+      ? new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xaaaaff, emissiveIntensity: 0.9, roughness: 0.2, metalness: 0.5 })
+      : new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff3300, emissiveIntensity: 0.8, roughness: 0.2, metalness: 0.4 });
+    const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.09, 10), mat);
+    coin.rotation.x = Math.PI / 2;
+    coin.position.set(lx, 0.9, z);
+    this.scene.add(coin);
+    this.runnerCoins.push({ mesh: coin, laneX: lx, z, powerup: isStar ? 'star' : 'double' });
   },
 
   // ── RUNNER: MAIN UPDATE ────────────────────────────────────
@@ -2228,7 +2282,9 @@ const Game = {
     // ── Timer & speed ramp
     this.runnerTime += dt;
     const pct = Math.min(this.runnerTime / this.runnerTimeLimit, 1.0);
-    this.runnerSpeed = 8 + pct * 9;  // 8 → 17 units/sec over 2 min
+    const baseSpeed = 8 + pct * 9;  // 8 → 17 units/sec over 2 min
+    const slowMult  = (this.runnerSlowed > 0) ? 0.7 : 1.0;
+    this.runnerSpeed = baseSpeed * slowMult;
 
     // ── Move player forward
     const pz = this.player.pos.z + this.runnerSpeed * dt;
@@ -2249,17 +2305,82 @@ const Game = {
       }
     }
 
+    // Apply slow effect cooldown
+    if (this.runnerSlowed > 0) {
+      this.runnerSlowed -= dt;
+    }
+
     // Apply to mesh
     this.playerGroup.position.x = this.player.pos.x;
     this.playerGroup.position.z = this.player.pos.z;
     this.playerGroup.position.y = this.runnerJumpY;
     this.playerGroup.rotation.y = 0; // Paul's nose faces +Z naturally — no flip needed
 
+    // ── Galloping horse leg animation
+    if (this.runnerHorse) {
+      const legSin = Math.sin(this.runnerTime * 12);
+      // Legs are first 4 children of runnerHorse (front-left, front-right, back-left, back-right)
+      for (let li = 0; li < 4; li++) {
+        const leg = this.runnerHorse.children[li];
+        if (leg) {
+          // Alternating pairs: 0,3 together vs 1,2 together
+          const phase = (li === 0 || li === 3) ? legSin : -legSin;
+          leg.position.y = 0.29 + phase * 0.12;
+        }
+      }
+    }
+
+    // ── Dust particles behind horse
+    if (this.runnerDustParticles && this.runnerDustParticles.length) {
+      // Emit 1-2 particles per frame
+      const emitCount = Math.random() < 0.5 ? 1 : 2;
+      let emitted = 0;
+      for (const p of this.runnerDustParticles) {
+        if (emitted >= emitCount) break;
+        if (!p.visible) {
+          p.visible = true;
+          p.position.set(
+            this.player.pos.x + (Math.random() - 0.5) * 0.6,
+            0.1 + Math.random() * 0.3,
+            this.player.pos.z - 0.8
+          );
+          p.vel.set(
+            (Math.random() - 0.5) * 3.0,
+            0.5 + Math.random() * 1.5,
+            -(2 + Math.random() * 3)
+          );
+          const lifespan = 0.4 + Math.random() * 0.3;
+          p.life    = lifespan;
+          p.maxLife = lifespan;
+          emitted++;
+        }
+      }
+      // Update all active particles
+      for (const p of this.runnerDustParticles) {
+        if (!p.visible) continue;
+        p.life -= dt;
+        if (p.life <= 0) {
+          p.visible = false;
+          continue;
+        }
+        p.position.x += p.vel.x * dt;
+        p.position.y += p.vel.y * dt;
+        p.position.z += p.vel.z * dt;
+        const t = p.life / p.maxLife;
+        p.material.opacity = 0.7 * t;
+        const sc = t * 0.8;
+        p.scale.setScalar(sc > 0.05 ? sc : 0.05);
+      }
+    }
+
     // ── Camera
     this.updateRunnerCamera(dt);
 
     // ── Invincibility cooldown
     if (this.runnerInvincible > 0) this.runnerInvincible -= dt;
+
+    // ── Double coin timer
+    if (this.runnerDoubleCoin > 0) this.runnerDoubleCoin -= dt;
 
     // ── Spawn content ahead
     while (this.runnerNextZ < pz + 90) this.spawnRunnerChunk();
@@ -2285,8 +2406,25 @@ const Game = {
       if (c.z < pz - 10) { this.scene.remove(c.mesh); return false; }
       if (Math.abs(pz - c.z) < 0.85 && Math.abs(this.player.pos.x - c.laneX) < 0.95) {
         this.scene.remove(c.mesh);
-        this.inventory.shekels++;
-        this.updateInventoryHUD();
+        // Power-up handling
+        if (c.powerup === 'star') {
+          this.runnerInvincible = 5.0;
+          this.showRunnerPowerupMsg('INVINCIBLE!');
+        } else if (c.powerup === 'double') {
+          this.runnerDoubleCoin = 8.0;
+          this.showRunnerPowerupMsg('DOUBLE COINS!');
+        } else {
+          // Normal coin — apply multiplier
+          const gain = (this.runnerDoubleCoin > 0 ? 2 : 1) * this.runnerMultiplier;
+          this.inventory.shekels += gain;
+          this.updateInventoryHUD();
+          // Increment multiplier (max 4)
+          if (this.runnerMultiplier < 4) {
+            this.runnerMultiplier++;
+            const mEl = document.getElementById('runner-multiplier');
+            if (mEl) mEl.textContent = 'x' + this.runnerMultiplier;
+          }
+        }
         return false;
       }
       return true;
@@ -2309,14 +2447,100 @@ const Game = {
     // ── Collision
     this.checkRunnerCollision();
 
-    // ── Progress bar
+    // ── Progress bar (existing runner bar)
     const fill = document.getElementById('runner-bar-fill');
     if (fill) fill.style.width = (pct * 100) + '%';
+
+    // ── Damascus progress bar
+    const dpFill = document.getElementById('damascus-progress-fill');
+    if (dpFill) dpFill.style.width = (pct * 100) + '%';
+
+    // ── Sky color shift (daytime blue → dusk orange at 90s)
+    if (this.scene.background && this.runnerTime > 90) {
+      const dusk = new THREE.Color(0xFF7043);
+      const day  = new THREE.Color(0x87CEEB);
+      const t = Math.min((this.runnerTime - 90) / (this.runnerTimeLimit - 90), 1.0);
+      this.scene.background.copy(day).lerp(dusk, t);
+    }
+
+    // ── Growing light near end (last 20%)
+    if (pct > 0.8 && this.runnerAmbientLight) {
+      this.runnerAmbientLight.intensity = 0.4 + (pct - 0.8) / 0.2 * 2.0;
+      // Shift sky toward white
+      const white = new THREE.Color(0xffffff);
+      const t2 = (pct - 0.8) / 0.2;
+      if (this.scene.background) this.scene.background.lerp(white, t2 * 0.5);
+      // Create/update growing white light ahead of player
+      if (!this.runnerEndLight) {
+        this.runnerEndLight = new THREE.PointLight(0xffffff, 0, 200);
+        this.scene.add(this.runnerEndLight);
+      }
+      this.runnerEndLight.position.set(0, 20, this.player.pos.z + 50);
+      this.runnerEndLight.intensity = (pct - 0.8) / 0.2 * 3.0;
+    }
+
+    // ── Biblical quote milestones
+    const prevT = this.runnerMilestonePrev;
+    const curT  = this.runnerTime;
+    const quotes = [
+      '"And as he journeyed, he came near Damascus…" — Acts 9:3',
+      '"Saul, yet breathing out threatenings and slaughter…" — Acts 9:1',
+      '"He made haste, and arose…" — Acts 22:18',
+    ];
+    for (let mi = 0; mi < this.runnerMilestones.length; mi++) {
+      const ms = this.runnerMilestones[mi];
+      if (prevT < ms && curT >= ms) {
+        this.showRunnerQuote(quotes[mi]);
+      }
+    }
+    this.runnerMilestonePrev = curT;
 
     // ── Finish check
     if (this.runnerTime >= this.runnerTimeLimit) {
       this.finishRunner();
     }
+  },
+
+  showRunnerPowerupMsg(text) {
+    let el = document.getElementById('runner-powerup-msg');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'runner-powerup-msg';
+      el.style.cssText = [
+        'position:fixed','top:30%','left:50%','transform:translateX(-50%)',
+        'z-index:200','font-family:Cinzel,serif','font-size:1.6rem',
+        'color:#f0c840','font-weight:700','text-shadow:0 0 20px rgba(255,200,0,0.9)',
+        'pointer-events:none','text-align:center','transition:opacity 0.5s',
+        'letter-spacing:0.1em'
+      ].join(';');
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.style.opacity = '1';
+    clearTimeout(this._powerupMsgTimer);
+    this._powerupMsgTimer = setTimeout(() => { el.style.opacity = '0'; }, 2000);
+  },
+
+  showRunnerQuote(text) {
+    let el = document.getElementById('runner-quote');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'runner-quote';
+      el.style.cssText = [
+        'position:fixed','top:50%','left:50%','transform:translate(-50%,-50%)',
+        'z-index:190','background:rgba(0,0,0,0.6)','padding:18px 28px',
+        'border-radius:10px','max-width:420px','text-align:center',
+        'font-family:Crimson Text,Georgia,serif','font-style:italic',
+        'font-size:1.05rem','color:#f5f0e0','pointer-events:none',
+        'line-height:1.65','transition:opacity 0.6s','opacity:0',
+        'border:1px solid rgba(201,168,76,0.3)'
+      ].join(';');
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.style.opacity = '1';
+    clearTimeout(this._quoteMsgTimer);
+    this._quoteMsgTimer = setTimeout(() => { el.style.opacity = '0'; }, 3000);
   },
 
   updateRunnerCamera(dt) {
@@ -2329,6 +2553,13 @@ const Game = {
     this.cam.pos.y += (ty - this.cam.pos.y) * 5  * dt;
     this.cam.pos.z += (tz - this.cam.pos.z) * 8  * dt;
     this.camera.position.copy(this.cam.pos);
+    // Screen shake
+    if (this.runnerShake > 0) {
+      this.camera.position.x += (Math.random() - 0.5) * 2 * this.runnerShake * 0.4;
+      this.camera.position.y += (Math.random() - 0.5) * 2 * this.runnerShake * 0.4;
+      this.runnerShake *= 0.75;
+      if (this.runnerShake < 0.01) this.runnerShake = 0;
+    }
     this.camera.lookAt(px, 0.5, pz + 10);
   },
 
@@ -2355,6 +2586,15 @@ const Game = {
       }
 
       const dx = Math.abs(px - obs.laneX);
+
+      // Sand dune — slows instead of hitting
+      if (obs.type === 'dune') {
+        if (dz < 1.2 && dx < 1.0 && this.runnerSlowed <= 0) {
+          this.runnerSlowed = 1.0; // 1 second slow (speed multiplied in updateRunner)
+        }
+        continue;
+      }
+
       if (dz < 1.0 && dx < 1.1) {
         // Jumpable obstacles: clear if player is high enough
         if (obs.mesh._clearJumpY !== undefined && obs.mesh._clearJumpY < 999) {
@@ -2368,6 +2608,10 @@ const Game = {
 
   hitRunner() {
     this.runnerInvincible = 2.0;
+    this.runnerShake = 0.35;    // camera shake
+    this.runnerMultiplier = 1;  // reset multiplier on hit
+    const mEl = document.getElementById('runner-multiplier');
+    if (mEl) mEl.textContent = 'x1';
     this.runnerLives--;
     // Update heart HUD
     const hEl = document.getElementById('rh-' + (this.runnerLives + 1));
@@ -2407,6 +2651,11 @@ const Game = {
     this.runnerLives       = 3;
     this.runnerInvincible  = 0;
     this.runnerNextZ       = 28;
+    this.runnerShake       = 0;
+    this.runnerSlowed      = 0;
+    this.runnerDoubleCoin  = 0;
+    this.runnerMultiplier  = 1;
+    this.runnerMilestonePrev = 0;
     this.encounterTriggered = false;
 
     // Restore hearts
@@ -2415,6 +2664,10 @@ const Game = {
       if (el) el.classList.remove('lost');
     });
     document.getElementById('runner-bar-fill').style.width = '0%';
+    const dpFill = document.getElementById('damascus-progress-fill');
+    if (dpFill) dpFill.style.width = '0%';
+    const mEl = document.getElementById('runner-multiplier');
+    if (mEl) mEl.textContent = 'x1';
 
     // Rebuild start
     this.buildRunnerStart();
@@ -2426,20 +2679,46 @@ const Game = {
     this.runnerFinished = true;
     this.runnerActive   = false;
 
-    // Restore main HUD
-    document.getElementById('hud').style.display = '';
-    document.getElementById('runner-hud').classList.add('hidden');
-    document.getElementById('runner-btns').classList.add('hidden');
-    document.getElementById('jump-btn').style.display = 'none';
-    document.getElementById('runner-bar-fill').style.width = '100%';
+    // Dramatic slowdown over 1 second, then white flash, then encounter
+    let slowT = 0;
+    const origSpeed = this.runnerSpeed;
+    const slowInterval = setInterval(() => {
+      slowT += 0.016;
+      this.runnerSpeed = Math.max(2, origSpeed * (1 - slowT));
+      if (slowT >= 1.0) clearInterval(slowInterval);
+    }, 16);
 
-    this.triggerEncounter();
-
-    // Auto-complete after encounter plays out
     setTimeout(() => {
-      this.restoreSight();
-      setTimeout(() => this.showDamascusComplete(), 2500);
-    }, 14000);
+      // White screen flash
+      const wFlash = document.createElement('div');
+      wFlash.style.cssText = 'position:fixed;inset:0;z-index:250;background:white;pointer-events:none;transition:opacity 1.2s;';
+      document.body.appendChild(wFlash);
+      setTimeout(() => {
+        wFlash.style.opacity = '0';
+        setTimeout(() => wFlash.remove(), 1200);
+      }, 300);
+
+      // Restore main HUD
+      document.getElementById('hud').style.display = '';
+      document.getElementById('runner-hud').classList.add('hidden');
+      document.getElementById('runner-btns').classList.add('hidden');
+      document.getElementById('jump-btn').style.display = 'none';
+      document.getElementById('runner-bar-fill').style.width = '100%';
+      const dpFill = document.getElementById('damascus-progress-fill');
+      if (dpFill) dpFill.style.width = '100%';
+      const mElF = document.getElementById('runner-multiplier');
+      if (mElF) mElF.style.display = 'none';
+      const dpEl = document.getElementById('damascus-progress');
+      if (dpEl) dpEl.style.display = 'none';
+
+      this.triggerEncounter();
+
+      // Auto-complete after encounter plays out
+      setTimeout(() => {
+        this.restoreSight();
+        setTimeout(() => this.showDamascusComplete(), 2500);
+      }, 14000);
+    }, 1000);
   },
 
   // ── RUNNER: CONTROLS ──────────────────────────────────────
@@ -2585,11 +2864,25 @@ const Game = {
     for (const d of this.dustParticles) { d.mesh.geometry.dispose(); d.mesh.material.dispose(); }
     this.dustParticles = [];
 
-    // Atmosphere
-    this.scene.fog.color.set(0xd4c090);
-    this.scene.fog.near = 40;
-    this.scene.fog.far  = 120;
-    this.scene.background = new THREE.Color(0xd4c090);
+    // Atmosphere — daytime blue sky
+    this.scene.fog = new THREE.Fog(0xe8d5a0, 30, 120);
+    this.scene.background = new THREE.Color(0x87CEEB);
+
+    // Sun point light
+    const sunLight = new THREE.PointLight(0xffe090, 1.5, 500);
+    sunLight.position.set(50, 80, 200);
+    this.scene.add(sunLight);
+
+    // Ambient light (stored for end-sequence)
+    const ambLight = new THREE.AmbientLight(0xffeedd, 0.4);
+    this.scene.add(ambLight);
+    this.runnerAmbientLight = ambLight;
+
+    // Directional light for shadows
+    const dirLight = new THREE.DirectionalLight(0xfff0cc, 1.1);
+    dirLight.position.set(10, 20, -5);
+    dirLight.castShadow = true;
+    this.scene.add(dirLight);
 
     // Init runner state
     this.runnerActive      = true;
@@ -2606,6 +2899,14 @@ const Game = {
     this.runnerObstacles   = [];
     this.runnerRoadMeshes  = [];
     this.runnerNextZ       = 28;
+    this.runnerShake       = 0;
+    this.runnerSlowed      = 0;
+    this.runnerDoubleCoin  = 0;
+    this.runnerMultiplier  = 1;
+    this.runnerMultiplierTimer = 0;
+    this.runnerMilestones  = [30, 60, 90];
+    this.runnerMilestonePrev = 0;
+    this.runnerEndLight    = null;
     this.encounterTriggered = false;
 
     // Place player at start
@@ -2622,6 +2923,21 @@ const Game = {
     this.mountPlayerOnHorse();
     this.initRunnerControls();
 
+    // Create dust particle pool (12 small spheres)
+    this.runnerDustParticles = [];
+    for (let i = 0; i < 12; i++) {
+      const pm = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 5, 4),
+        new THREE.MeshStandardMaterial({ color: 0xc8a870, transparent: true, opacity: 0.7, roughness: 1.0 })
+      );
+      pm.visible = false;
+      pm.life    = 0;
+      pm.maxLife = 0.5;
+      pm.vel     = new THREE.Vector3();
+      this.scene.add(pm);
+      this.runnerDustParticles.push(pm);
+    }
+
     // HUD
     document.getElementById('hud').style.display = 'none';
     document.getElementById('runner-hud').classList.remove('hidden');
@@ -2629,6 +2945,16 @@ const Game = {
     const isMobile = 'ontouchstart' in window;
     if (isMobile) document.getElementById('runner-btns').classList.remove('hidden');
     document.getElementById('location-name').textContent = 'Road to Damascus';
+
+    // Reset multiplier HUD
+    const mEl = document.getElementById('runner-multiplier');
+    if (mEl) { mEl.textContent = 'x1'; mEl.style.display = ''; }
+
+    // Show & reset Damascus progress bar
+    const dpEl = document.getElementById('damascus-progress');
+    if (dpEl) dpEl.style.display = '';
+    const dpFill = document.getElementById('damascus-progress-fill');
+    if (dpFill) dpFill.style.width = '0%';
 
     // Show brief intro card
     this.showQuestPopup(
@@ -2706,14 +3032,20 @@ const Game = {
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8a6a40, roughness: 0.95, metalness: 0 });
     const frondMat = new THREE.MeshStandardMaterial({ color: 0x6a5830, roughness: 0.90, metalness: 0 });
 
-    // Ground plane
+    // Ground plane — extending far into the horizon
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 360), dustMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(0, 0, 170);
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    this.scene.background = new THREE.Color(0xccc0a0);
+    // Far horizon ground plane stretching ahead
+    const farGround = new THREE.Mesh(new THREE.PlaneGeometry(200, 2000), dustMat.clone());
+    farGround.rotation.x = -Math.PI / 2;
+    farGround.position.set(0, -0.01, 500);
+    this.scene.add(farGround);
+
+    // Background is already set in loadDamascusRoad (0x87CEEB); don't override here
 
     // Main road
     const road = new THREE.Mesh(new THREE.PlaneGeometry(5, 340), roadMat);
