@@ -2057,50 +2057,52 @@ const Game = {
 
   // ── RUNNER: OBSTACLE PATTERNS ─────────────────────────────
   spawnObstaclePattern(z, phase) {
-    const r = Math.random();
-    const rl = () => Math.floor(Math.random() * 3);
+    const r  = Math.random();
+    const rs = () => (Math.random() < 0.5 ? 0 : 2); // side lane only (left or right)
+    const rl = () => Math.floor(Math.random() * 3);  // any lane
 
     if (phase === 0) {
-      // Easy: single obstacles with generous gaps — always leave at least one lane open
-      if      (r < 0.10) this.spawnObs('dune',   rl(), z);
-      else if (r < 0.22) this.spawnObs('rock',   rl(), z);
-      else if (r < 0.34) this.spawnObs('thorn',  rl(), z);
-      else if (r < 0.45) this.spawnObs('person', rl(), z);   // random lane, not always center
-      else if (r < 0.55) this.spawnObs('person', rl(), z);
-      else if (r < 0.65) this.spawnObs('cart',   rl(), z);
-      else if (r < 0.76) this.spawnObs('camel',  rl(), z);
-      else if (r < 0.86) this.spawnObs('log',    rl(), z);
-      // else open road
+      // Easy: ~70% side-lane only, ~15% center, ~15% open
+      // Player can comfortably stay center most of the time
+      if      (r < 0.12) this.spawnObs('dune',   rs(), z);   // side only
+      else if (r < 0.27) this.spawnObs('rock',   rs(), z);   // side only
+      else if (r < 0.40) this.spawnObs('thorn',  rs(), z);   // side only
+      else if (r < 0.52) this.spawnObs('person', rs(), z);   // side only
+      else if (r < 0.62) this.spawnObs('camel',  rs(), z);   // side only
+      else if (r < 0.70) this.spawnObs('log',    rs(), z);   // side only
+      else if (r < 0.78) this.spawnObs('rock',   1,    z);   // center (must dodge)
+      else if (r < 0.84) this.spawnObs('person', 1,    z);   // center (must dodge)
+      // else open road — 16% chance
 
     } else if (phase === 1) {
-      // Medium: two-obstacle combos — leave center lane available more often
-      if      (r < 0.08) this.spawnObs('dune',   rl(), z);
-      else if (r < 0.18) { this.spawnObs('rock', 0, z); this.spawnObs('rock', 2, z); }   // center is clear
-      else if (r < 0.28) this.spawnObs('soldier', rl(), z);
-      else if (r < 0.37) { this.spawnObs('log', 0, z); this.spawnObs('thorn', 2, z); }   // center clear
-      else if (r < 0.46) { this.spawnObs('log', 2, z); this.spawnObs('thorn', 0, z); }   // center clear
-      else if (r < 0.54) this.spawnObs('camel',  rl(), z);   // random lane now
-      else if (r < 0.63) { this.spawnObs('cart', Math.random() < 0.5 ? 0 : 2, z); this.spawnObs('thorn', rl(), z); }
-      else if (r < 0.71) this.spawnObs('pillar', rl(), z);
-      else if (r < 0.79) this.spawnObs('boulder', rl(), z);  // random, not always center
-      else if (r < 0.88) { this.spawnObs('camel', 0, z); this.spawnObs('rock', 2, z); }  // center clear
-      else if (r < 0.95) this.spawnObs('gap', 1, z);
-      else { this.spawnObs('rock', rl(), z); this.spawnObs('person', rl(), z + 8); }
+      // Medium: mix of "block sides → center is escape" and single-lane
+      if      (r < 0.10) { this.spawnObs('rock',    0, z); this.spawnObs('rock',    2, z); } // sides blocked, center open
+      else if (r < 0.20) { this.spawnObs('thorn',   0, z); this.spawnObs('thorn',   2, z); } // sides blocked
+      else if (r < 0.30) { this.spawnObs('camel',   0, z); this.spawnObs('rock',    2, z); } // sides blocked
+      else if (r < 0.40) { this.spawnObs('log',     0, z); this.spawnObs('soldier', 2, z); } // sides blocked
+      else if (r < 0.50) this.spawnObs('soldier',  rs(), z);                                 // side only
+      else if (r < 0.58) this.spawnObs('camel',    rs(), z);                                 // side only
+      else if (r < 0.65) this.spawnObs('pillar',   rs(), z);                                 // side only
+      else if (r < 0.72) this.spawnObs('boulder',  rs(), z);                                 // side only
+      else if (r < 0.79) this.spawnObs('rock',      1,   z);                                 // center (dodge)
+      else if (r < 0.85) { this.spawnObs('cart', rs(), z); this.spawnObs('thorn', rs(), z + 8); } // staggered sides
+      else if (r < 0.93) this.spawnObs('gap', 1, z);                                         // jump obstacle
+      else this.spawnObs('dune', rs(), z);
 
     } else {
-      // Hard: tight combos — force side lanes, keep center survivable
-      if      (r < 0.07) this.spawnObs('dune',   rl(), z);
-      else if (r < 0.17) { this.spawnObs('rock', 0, z);    this.spawnObs('rock', 2, z); }   // center clear
-      else if (r < 0.26) { this.spawnObs('camel', rl(), z); this.spawnObs('rock', 0, z); }
-      else if (r < 0.35) { this.spawnObs('soldier', 0, z); this.spawnObs('thorn', 2, z); }  // center clear
-      else if (r < 0.44) { this.spawnObs('soldier', 0, z); this.spawnObs('rock', 2, z); }   // center clear
-      else if (r < 0.53) { this.spawnObs('soldier', 2, z); this.spawnObs('rock', 0, z); }   // center clear
-      else if (r < 0.62) { this.spawnObs('cart', 0, z);    this.spawnObs('soldier', 2, z); }// center clear
-      else if (r < 0.70) { this.spawnObs('pillar', rl(), z); this.spawnObs('camel', Math.random() < 0.5 ? 0 : 2, z + 9); }
-      else if (r < 0.79) { this.spawnObs('log', 0, z);     this.spawnObs('person', 2, z + 7); }  // center clear
-      else if (r < 0.88) { this.spawnObs('cart', rl(), z); this.spawnObs('rock', 0, z + 5); }
-      else if (r < 0.95) this.spawnObs('gap', 1, z);
-      else { this.spawnObs('boulder', rl(), z); this.spawnObs('rock', rl(), z + 10); }
+      // Hard: mostly two-lane blockages leaving exactly one lane; center is often the escape
+      if      (r < 0.12) { this.spawnObs('rock',    0, z); this.spawnObs('rock',    2, z); } // center open
+      else if (r < 0.22) { this.spawnObs('soldier', 0, z); this.spawnObs('camel',   2, z); } // center open
+      else if (r < 0.32) { this.spawnObs('soldier', 2, z); this.spawnObs('camel',   0, z); } // center open
+      else if (r < 0.42) { this.spawnObs('cart',    0, z); this.spawnObs('soldier', 2, z); } // center open
+      else if (r < 0.50) { this.spawnObs('rock',    0, z); this.spawnObs('thorn',   2, z); } // center open
+      else if (r < 0.58) { this.spawnObs('camel',   1, z); this.spawnObs('rock',    rs(), z + 8); } // center blocked then side
+      else if (r < 0.65) { this.spawnObs('pillar',  0, z); this.spawnObs('camel',   2, z + 9); }   // center open both
+      else if (r < 0.72) { this.spawnObs('log',     0, z); this.spawnObs('log',     2, z); }        // center open
+      else if (r < 0.79) this.spawnObs('boulder',  rs(), z);
+      else if (r < 0.86) { this.spawnObs('cart',    rs(), z); this.spawnObs('rock',  rl(), z + 6); }
+      else if (r < 0.94) this.spawnObs('gap', 1, z);
+      else { this.spawnObs('dune', rs(), z); this.spawnObs('soldier', rs(), z + 10); }
     }
   },
 
@@ -2646,6 +2648,7 @@ const Game = {
     this.runnerSpeed       = 8;
     this.runnerLane        = 1;
     this.runnerTargetLane  = 1;
+    this._lastObsLane      = -1;
     this.runnerJumping     = false;
     this.runnerJumpY       = 0;
     this.runnerLives       = 3;
