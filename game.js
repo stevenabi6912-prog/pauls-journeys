@@ -2432,14 +2432,14 @@ const Game = {
       return true;
     });
 
-    // ── Joystick lane input (edge detect)
+    // ── Joystick lane input (edge detect) — right = higher lane, left = lower lane
     if (this.joy.active && this.joy.mag > 0.45) {
       const jx = Math.cos(this.joy.angle);
       const jy = Math.sin(this.joy.angle);
       if (!this.runnerLanePrevJoy) {
         this.runnerLanePrevJoy = true;
-        if (jx > 0.5  && this.runnerTargetLane > 0) this.runnerTargetLane--;
-        else if (jx < -0.5 && this.runnerTargetLane < 2) this.runnerTargetLane++;
+        if      (jx > 0.5  && this.runnerTargetLane < 2) this.runnerTargetLane++;
+        else if (jx < -0.5 && this.runnerTargetLane > 0) this.runnerTargetLane--;
         else if (jy < -0.5 && !this.runnerJumping) this.startRunnerJump();
       }
     } else {
@@ -2480,22 +2480,6 @@ const Game = {
       this.runnerEndLight.position.set(0, 20, this.player.pos.z + 50);
       this.runnerEndLight.intensity = (pct - 0.8) / 0.2 * 3.0;
     }
-
-    // ── Biblical quote milestones
-    const prevT = this.runnerMilestonePrev;
-    const curT  = this.runnerTime;
-    const quotes = [
-      '"And as he journeyed, he came near Damascus…" — Acts 9:3',
-      '"Saul, yet breathing out threatenings and slaughter…" — Acts 9:1',
-      '"He made haste, and arose…" — Acts 22:18',
-    ];
-    for (let mi = 0; mi < this.runnerMilestones.length; mi++) {
-      const ms = this.runnerMilestones[mi];
-      if (prevT < ms && curT >= ms) {
-        this.showRunnerQuote(quotes[mi]);
-      }
-    }
-    this.runnerMilestonePrev = curT;
 
     // ── Finish check
     if (this.runnerTime >= this.runnerTimeLimit) {
@@ -2745,8 +2729,8 @@ const Game = {
       const dx = e.changedTouches[0].clientX - sx;
       const dy = e.changedTouches[0].clientY - sy;
       if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 25) {
-        if (dx < 0 && this.runnerTargetLane < 2) this.runnerTargetLane++;
-        if (dx > 0 && this.runnerTargetLane > 0) this.runnerTargetLane--;
+        if (dx > 0 && this.runnerTargetLane < 2) this.runnerTargetLane++;
+        if (dx < 0 && this.runnerTargetLane > 0) this.runnerTargetLane--;
       } else if (dy < -25 && !this.runnerJumping) {
         this.startRunnerJump();
       }
@@ -2757,8 +2741,8 @@ const Game = {
     // Lane buttons
     const bl = document.getElementById('rb-left');
     const br = document.getElementById('rb-right');
-    if (bl) bl.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane < 2) this.runnerTargetLane++; }, { passive: false });
-    if (br) br.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane > 0) this.runnerTargetLane--; }, { passive: false });
+    if (bl) bl.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane > 0) this.runnerTargetLane--; }, { passive: false });
+    if (br) br.addEventListener('touchstart', (e) => { e.preventDefault(); if (this.runnerTargetLane < 2) this.runnerTargetLane++; }, { passive: false });
 
     // Jump button
     const jb = document.getElementById('jump-btn');
