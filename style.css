@@ -858,3 +858,161 @@ body.touch-device #dialogue-box { bottom: 62vh; }
 .hidden {
   display: none !important;
 }
+
+/* ── JOURNEY 1: SEA VOYAGE HUD ───────────────────────────── */
+#sea-hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  pointer-events: none;
+  font-family: 'Cinzel', serif;
+}
+
+#sea-lives {
+  font-size: 1.2rem;
+  letter-spacing: 0.12em;
+}
+
+#sea-progress-bar {
+  width: clamp(200px, 50vw, 380px);
+  height: 10px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(201,168,76,0.4);
+}
+
+#sea-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #4a8ab0, #c9a84c);
+  border-radius: 5px;
+  transition: width 0.3s;
+}
+
+#sea-label {
+  color: #c9a84c;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  opacity: 0.85;
+}
+
+/* ── JOURNEY 1: SERMON GAME ──────────────────────────────── */
+#sermon-game {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0,0,0,0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+#sermon-inner {
+  background: rgba(8,6,2,0.97);
+  border: 2px solid #c9a84c;
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 560px;
+  width: 100%;
+  box-shadow: 0 0 40px rgba(0,0,0,0.8);
+}
+
+#sermon-title {
+  font-family: 'Cinzel', serif;
+  color: #c9a84c;
+  font-size: clamp(0.85rem, 2vw, 1rem);
+  letter-spacing: 0.18em;
+  margin-bottom: 18px;
+  text-align: center;
+  opacity: 0.85;
+}
+
+#sermon-question {
+  font-family: 'Crimson Text', Georgia, serif;
+  font-size: clamp(1rem, 2.5vw, 1.15rem);
+  color: #f5ecd0;
+  line-height: 1.65;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+#sermon-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.sermon-option {
+  padding: 10px 16px;
+  background: rgba(201,168,76,0.08);
+  border: 1.5px solid rgba(201,168,76,0.35);
+  border-radius: 8px;
+  color: #f0e0b0;
+  font-family: 'Crimson Text', Georgia, serif;
+  font-size: clamp(0.88rem, 2.2vw, 0.98rem);
+  line-height: 1.55;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.sermon-option:hover:not(:disabled) {
+  background: rgba(201,168,76,0.18);
+  border-color: #c9a84c;
+}
+
+.sermon-option:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.sermon-correct {
+  background: rgba(60,160,80,0.2) !important;
+  border-color: #60c080 !important;
+  color: #a0e0b0 !important;
+}
+
+.sermon-wrong {
+  background: rgba(160,40,40,0.2) !important;
+  border-color: #c05050 !important;
+  color: #e0a0a0 !important;
+}
+
+.sermon-feedback {
+  font-family: 'Crimson Text', Georgia, serif;
+  font-style: italic;
+  font-size: 0.88rem;
+  padding: 8px 14px;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+.sermon-right {
+  color: #80e0a0;
+  background: rgba(60,160,80,0.1);
+  border-left: 3px solid #60c080;
+}
+
+.sermon-missed {
+  color: #e0a0a0;
+  background: rgba(160,40,40,0.1);
+  border-left: 3px solid #c05050;
+}
+
+#sermon-score-bar {
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  color: #c9a84c;
+  letter-spacing: 0.15em;
+  text-align: right;
+}

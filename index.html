@@ -150,6 +150,17 @@
     </div>
   </div>
 
+  <!-- Score multiplier (top-right, shown during runner) -->
+  <div id="runner-multiplier" style="display:none">x1</div>
+
+  <!-- Damascus progress bar (top-center) -->
+  <div id="damascus-progress">
+    <div id="damascus-progress-label">Damascus</div>
+    <div id="damascus-progress-bar-bg">
+      <div id="damascus-progress-fill"></div>
+    </div>
+  </div>
+
   <!-- Runner lane buttons (mobile) -->
   <div id="runner-btns" class="hidden">
     <button id="rb-left">&#9664;</button>
@@ -158,6 +169,21 @@
 
   <!-- Blind overlay (Paul's blindness on the Damascus road) -->
   <div id="blind-overlay"></div>
+
+  <!-- Journey 1 UI -->
+  <div id="sermon-game" class="hidden">
+    <div id="sermon-inner">
+      <div id="sermon-title">Paul's Sermon — Pisidian Antioch</div>
+      <div id="sermon-question"></div>
+      <div id="sermon-options"></div>
+      <div id="sermon-score-bar"></div>
+    </div>
+  </div>
+  <div id="sea-hud" class="hidden">
+    <div id="sea-lives"></div>
+    <div id="sea-progress-bar"><div id="sea-progress-fill"></div></div>
+    <span id="sea-label">Seleucia &#8594; Cyprus</span>
+  </div>
 
   <script src="scenes.js"></script>
   <script type="importmap">

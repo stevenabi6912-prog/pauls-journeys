@@ -70,7 +70,7 @@ const Game = {
   companionsRecruited: 0,
   horsesAcquired:      false,
   recruitedNPCs:       {},
-  inventory:           { shekels: 5, tentCloth: 0, tents: 0 },
+  inventory:           { shekels: 5, tentCloth: 0, tents: 0, denarii: 0 },
   minigameActive:      false,
   horseObjects:        [],
   choiceActive:        false,
@@ -79,6 +79,57 @@ const Game = {
   hintActive:          false,
   cutsceneActive:      false,
   cutsceneTimer:       0,
+
+  // ── FIRST MISSIONARY JOURNEY STATE ───────────────────────
+  antiochDenarii:      0,
+  antiochCommissioned: false,
+  journeyPhase:        0,    // 0=Jerusalem, 1=Damascus, 2=Antioch, 3=SeaVoyage, 4=Salamis, 5=Paphos, 6=MtnPass, 7=PisidianAntioch, 8=Iconium
+  playerName:          'Saul',
+  elymosBlinded:       false,
+  sergiusBelieved:     false,
+  nameChanged:         false,
+  antiochLoomVisits:   0,
+  salamisSynagogueVisited: false,
+  sermonScore:         0,
+  sermonComplete:      false,
+  pisidiaWeek2:        false,
+  pisidiaEscaping:     false,
+  pisidiaEscapeTimer:  0,
+
+  // ── JOURNEY 1 EXTENDED STATE ──────────────────────────────
+  antiochActive:       false,
+  antiochNPCsMet:      {},
+  antiochLeadersMet:   0,
+  antiochAllMet:       false,
+  antiochChurchEntered:false,
+  lystraPhase:         0,      // 0=healing, 1=zeus, 2=stoning
+  stoneCount:          0,
+  derbeComplete:       false,
+  j1Complete:          false,
+  mtnPassActive:       false,
+  mtnPassTime:         0,
+  returnJourneyActive: false,
+  currentScene:        'jerusalem', // track active scene name
+
+  // ── SEA VOYAGE STATE ──────────────────────────────────────
+  voyageActive:        false,
+  voyageTime:          0,
+  voyageTimeLimit:     90,
+  voyageBoat:          null,
+  voyageObstacles:     [],
+  voyageScrolls:       [],
+  voyageBoatX:        0,
+  voyageBoatTargetX:  0,
+  voyageSpeed:        4,
+  voyageInvincible:   0,
+  voyageLives:        3,
+  voyageFinished:     false,
+  voyagePrevJoy:      false,
+
+  // ── MOUNTAIN PASS STATE ───────────────────────────────────
+  mountainActive:      false,
+  mountainTime:        0,
+  mountainMarkShown:   false,
   npcPatrolStates:          {},
   dustParticles:            [],
   dustSpawnTimer:           0,
@@ -927,6 +978,16 @@ const Game = {
       return;
     }
 
+    if (this.voyageActive) {
+      this.updateSeaVoyage(dt);
+      return;
+    }
+
+    if (this.mtnPassActive) {
+      this.updateMtnPass(dt);
+      return;
+    }
+
     if (this.interactCooldown  > 0) this.interactCooldown  -= dt;
     if (this.gateBlockCooldown > 0) this.gateBlockCooldown -= dt;
 
@@ -1046,6 +1107,11 @@ const Game = {
     // Check for Damascus Road trigger (only after gate guard unlocks it)
     if (this.gateUnlocked && pos.z > 55.8 && !this.damascusRoadActive) {
       this.triggerDamascusRoad();
+    }
+
+    // Antioch scene checks
+    if (this.antiochActive) {
+      this.updateAntiochChecks(pos);
     }
 
     // Hidden bonus behind the temple — 50 shekels, one time only
@@ -1595,6 +1661,10 @@ const Game = {
           this.elScriptureRef.textContent = 'Acts 9:3';
           this.showDepartureScene();
         }
+
+      } else {
+        // Journey 1 callbacks
+        this._handleJ1DialogueComplete(cb, nid);
       }
     }
 
@@ -2666,7 +2736,43 @@ const Game = {
     this.runnerFinished = true;
     this.runnerActive   = false;
 
-    // Dramatic slowdown over 1 second, then white flash, then encounter
+    // Mountain pass mode — transition to Pisidian Antioch
+    if (this._runnerMtnMode) {
+      this._runnerMtnMode = false;
+      let slowT = 0;
+      const origSpeed = this.runnerSpeed;
+      const slowInterval = setInterval(() => {
+        slowT += 0.016;
+        this.runnerSpeed = Math.max(1, origSpeed * (1 - slowT));
+        if (slowT >= 1.0) clearInterval(slowInterval);
+      }, 16);
+
+      setTimeout(() => {
+        document.getElementById('hud').style.display = '';
+        document.getElementById('runner-hud').classList.add('hidden');
+        document.getElementById('runner-btns').classList.add('hidden');
+        document.getElementById('jump-btn').style.display = 'none';
+        const dpEl2 = document.getElementById('damascus-progress');
+        if (dpEl2) dpEl2.style.display = 'none';
+
+        this.showQuestPopup(
+          'Through the Taurus Mountains',
+          'After many days of hard travel, Paul and Barnabas arrived at Pisidian Antioch.',
+          'Acts 13:14'
+        );
+        const dismissBtn = document.getElementById('qp-dismiss');
+        if (dismissBtn) {
+          dismissBtn.onclick = () => {
+            document.getElementById('quest-popup').classList.add('hidden');
+            this.dialogueActive = false;
+            this.loadPisidianAntioch();
+          };
+        }
+      }, 1200);
+      return;
+    }
+
+    // Damascus Road mode (original behaviour)
     let slowT = 0;
     const origSpeed = this.runnerSpeed;
     const slowInterval = setInterval(() => {
@@ -2700,11 +2806,14 @@ const Game = {
 
       this.triggerEncounter();
 
-      // Auto-complete after encounter plays out
+      // Auto-complete after encounter plays out (encounter ~7s, then blind walk, then Ananias)
+      // Ananias dialogue triggers at z>307 via updatePlayer, so we use a generous timer as fallback
       setTimeout(() => {
-        this.restoreSight();
+        if (!this.sightRestored) {
+          this.restoreSight();
+        }
         setTimeout(() => this.showDamascusComplete(), 2500);
-      }, 14000);
+      }, 22000);
     }, 1000);
   },
 
@@ -3383,6 +3492,16 @@ const Game = {
     setTimeout(() => { t1.style.opacity = '1'; }, 800);
     setTimeout(() => { t2.style.opacity = '1'; }, 1500);
     setTimeout(() => { t3.style.opacity = '1'; }, 2400);
+
+    // After showing Damascus complete — transition to Antioch
+    setTimeout(() => {
+      ov.style.transition = 'opacity 1.5s ease';
+      ov.style.opacity = '0';
+      setTimeout(() => {
+        if (ov.parentNode) ov.remove();
+        this.loadAntioch();
+      }, 1600);
+    }, 5500);
   },
 
   // ── TEMPLE INTERIOR FURNISHINGS ───────────────────────────
@@ -4280,6 +4399,2014 @@ const Game = {
     const popup = document.getElementById('satchel-popup');
     if (popup) popup.classList.add('hidden');
   },
+
+  // ════════════════════════════════════════════════════════════
+  //  PAUL'S FIRST MISSIONARY JOURNEY — Acts 13-14
+  // ════════════════════════════════════════════════════════════
+
+  // ── SCENE TEARDOWN HELPER ────────────────────────────────
+  teardownScene() {
+    // If Paul was mounted on a horse (after Damascus/Mountain runner),
+    // rebuild the playerGroup fresh so RPG scenes have correct appearance
+    if (this.runnerPaulRider) {
+      // Remove the old playerGroup from scene entirely; rebuild clean
+      if (this.playerGroup && this.playerGroup.parent) {
+        this.playerGroup.parent.remove(this.playerGroup);
+      }
+      this.runnerPaulRider = null;
+      this.runnerHorse     = null;
+      this.buildPlayer(); // rebuild Paul's mesh from scratch
+    }
+
+    const toRemove = [];
+    for (const ch of this.scene.children) {
+      if (!ch.isLight) toRemove.push(ch);
+    }
+    toRemove.forEach(o => this.scene.remove(o));
+    this.scene.add(this.playerGroup);
+
+    // Clear dynamic NPC registry
+    this.npcObjects   = {};
+    this.signObjects  = [];
+    this.lampLights   = [];
+    this.npcPatrolStates = {};
+    this.dustParticles.forEach(d => { try { d.mesh.geometry.dispose(); d.mesh.material.dispose(); } catch(e){} });
+    this.dustParticles = [];
+  },
+
+  // ── RESET RUNNER HUD ─────────────────────────────────────
+  showRPGHud() {
+    document.getElementById('hud').style.display   = '';
+    document.getElementById('runner-hud').classList.add('hidden');
+    document.getElementById('jump-btn').style.display = 'none';
+    const rb = document.getElementById('runner-btns');
+    if (rb) rb.classList.add('hidden');
+    const dp = document.getElementById('damascus-progress');
+    if (dp) dp.style.display = 'none';
+    const rm = document.getElementById('runner-multiplier');
+    if (rm) rm.style.display = 'none';
+    const sh = document.getElementById('sea-hud');
+    if (sh) sh.classList.add('hidden');
+  },
+
+  // ── ADD STANDARD LIGHTS ──────────────────────────────────
+  addSceneLights(skyColor, sunColor, sunX, sunY, sunZ) {
+    const hemi = new THREE.HemisphereLight(skyColor || 0xffeebb, 0xb09060, 0.6);
+    this.scene.add(hemi);
+    const sun = new THREE.DirectionalLight(sunColor || 0xffe090, 1.6);
+    sun.position.set(sunX || 40, sunY || 30, sunZ || 20);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = sun.shadow.mapSize.height = 1024;
+    sun.shadow.camera.left = sun.shadow.camera.bottom = -50;
+    sun.shadow.camera.right = sun.shadow.camera.top = 50;
+    sun.shadow.camera.far = 120;
+    this.scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xc0a080, 0.25);
+    fill.position.set(-15, 10, -15);
+    this.scene.add(fill);
+  },
+
+  // ── BUILD GENERIC GROUND ─────────────────────────────────
+  addGround(color, size) {
+    const g = new THREE.Mesh(
+      new THREE.PlaneGeometry(size || 200, size || 200),
+      new THREE.MeshStandardMaterial({ color: color || 0xc4956a, roughness: 0.95 })
+    );
+    g.rotation.x = -Math.PI / 2;
+    g.receiveShadow = true;
+    this.scene.add(g);
+    return g;
+  },
+
+  // ── ADD BUILDING HELPER ──────────────────────────────────
+  addBox(x, y, z, w, h, d, color, castShadow) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshStandardMaterial({ color: color, roughness: 0.88 })
+    );
+    m.position.set(x, y, z);
+    if (castShadow !== false) { m.castShadow = true; m.receiveShadow = true; }
+    this.scene.add(m);
+    return m;
+  },
+
+  // ── SPAWN NPC INTO SCENE ─────────────────────────────────
+  spawnNPC(npcData) {
+    const group = this.createNPCGroup(npcData);
+    group.position.set(npcData.x, 0, npcData.z);
+    this.npcObjects[npcData.id] = { group, data: npcData };
+    this.scene.add(group);
+  },
+
+  // ═══════════════════════════════════════
+  //  1. ANTIOCH OF SYRIA HUB
+  // ═══════════════════════════════════════
+  loadAntioch() {
+    this.currentScene = 'antioch';
+    this.journeyPhase = 2;
+    this.teardownScene();
+    this.runnerActive    = false;
+    this.voyageActive    = false;
+    this.mtnPassActive   = false;
+    this.antiochActive   = true;
+    this.antiochLeadersMet = 0;
+    this.antiochAllMet   = false;
+    this.antiochChurchEntered = false;
+    this.antiochNPCsMet  = {};
+
+    // Atmosphere
+    this.scene.background = new THREE.Color(0x87b3d4);
+    this.scene.fog         = new THREE.FogExp2(0xd4c8a0, 0.022);
+
+    this.addSceneLights(0xc8dff0, 0xffe0a0, 60, 40, 30);
+    this.addGround(0xd4b87a);
+
+    this.buildAntiochWorld();
+
+    // Spawn NPCs
+    const antiochNPCs = [
+      { id: 'barnabas_antioch', name: 'Barnabas', trueName: 'Barnabas',
+        x: 5, z: 8,
+        bodyColor: 0x8a5c2c, accentColor: 0xc49050, headColor: 0xb07840,
+        dialogues: [
+          { speaker: 'Barnabas', text: '"Brother Paul! You have arrived at last. Antioch is unlike Jerusalem — here Jews and Greeks worship side by side. It was here we were first called Christians." — Acts 11:26' },
+          { speaker: 'Barnabas', text: '"The church is strong here, but the Spirit is moving us outward. There are islands and cities that have never heard the Name."' },
+        ],
+        onComplete: 'antioch_leader',
+      },
+      { id: 'simeon_niger', name: 'Simeon called Niger',
+        x: -6, z: 12,
+        bodyColor: 0x2a1a0a, accentColor: 0x5a3a1a, headColor: 0x3a2010,
+        dialogues: [
+          { speaker: 'Simeon called Niger', text: '"Shalom, Paul. I am Simeon, called Niger. I came to faith through the scattered believers who fled Jerusalem after Stephen\'s death." — Acts 11:19-20' },
+          { speaker: 'Simeon called Niger', text: '"This church is proof — the Spirit does not distinguish by nation or skin. We are all one in Christ."' },
+        ],
+        onComplete: 'antioch_leader',
+      },
+      { id: 'lucius_cyrene', name: 'Lucius of Cyrene',
+        x: 8, z: 15,
+        bodyColor: 0x6a4a2a, accentColor: 0x9a7050, headColor: 0xa07040,
+        dialogues: [
+          { speaker: 'Lucius of Cyrene', text: '"Paul — I am Lucius, from Cyrene on the Libyan coast. I came to Antioch years ago. It is a city of two worlds — Roman and Greek on one side, Jewish and Syrian on the other."' },
+          { speaker: 'Lucius of Cyrene', text: '"The Spirit of God is doing something new here. Something that even Jerusalem has not seen."' },
+        ],
+        onComplete: 'antioch_leader',
+      },
+      { id: 'manaen', name: 'Manaen',
+        x: -4, z: 6,
+        bodyColor: 0x4a3a6a, accentColor: 0x8a6aaa, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'Manaen', text: '"Paul. I am Manaen — I grew up in the court of Herod Antipas, the very man who beheaded John the Baptist. Yet here I stand, a servant of the living God."' },
+          { speaker: 'Manaen', text: '"God\'s grace reaches even into the palaces of kings. No one is beyond the reach of the Spirit." — Acts 13:1' },
+        ],
+        onComplete: 'antioch_leader',
+      },
+      { id: 'john_mark', name: 'John Mark',
+        x: 2, z: 18,
+        bodyColor: 0x5a7a4a, accentColor: 0x8aaa70, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'John Mark', text: '"Cousin Barnabas says I am to travel with you and serve as your helper. I am ready — I have seen much already. My mother\'s home in Jerusalem was a gathering place for the church."' },
+          { speaker: 'John Mark', text: '"I will carry what is needed. Where we go, I will go." — Acts 13:5' },
+        ],
+        onComplete: 'antioch_leader',
+      },
+      { id: 'antioch_believer1', name: 'Believer',
+        x: -8, z: 20,
+        bodyColor: 0x7a6040, accentColor: 0xaa8060, headColor: 0xb08060,
+        dialogues: [
+          { speaker: 'Believer', text: '"We have been praying and fasting for days now. The Spirit spoke clearly — Barnabas and Paul are set apart for a special work." — Acts 13:2-3' },
+          { speaker: 'Believer', text: '"May God go with you on the road ahead."' },
+        ],
+      },
+      { id: 'antioch_believer2', name: 'Believer',
+        x: 12, z: 10,
+        bodyColor: 0x8a7050, accentColor: 0xba9070, headColor: 0xc09060,
+        dialogues: [
+          { speaker: 'Believer', text: '"Antioch — the third city of the empire, and the heart of the new faith. People come from everywhere and find the same Lord."' },
+        ],
+      },
+    ];
+
+    for (const npc of antiochNPCs) {
+      this.spawnNPC(npc);
+    }
+
+    // Player placement
+    this.player.pos.set(0, 0, 25);
+    this.playerGroup.position.set(0, 0, 25);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 37);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Antioch of Syria';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 13:1-3';
+    if (this.elQuestText) this.elQuestText.textContent = 'Meet the five church leaders';
+
+    this.showQuestPopup(
+      'Antioch of Syria — The Holy Spirit Is Moving',
+      'Meet the leaders of the church. The Spirit is about to send you on a historic mission.',
+      'Acts 13:1-3'
+    );
+  },
+
+  buildAntiochWorld() {
+    const tan    = 0xc4a870;
+    const brown  = 0x7a5a30;
+    const wall   = 0xc8b078;
+    const roofC  = 0x9a7848;
+
+    // City walls
+    this.addBox( 22, 1.5, 12, 2, 3, 40, wall);   // east wall
+    this.addBox(-22, 1.5, 12, 2, 3, 40, wall);   // west wall
+    this.addBox(  0, 1.5,-16, 44, 3, 2, wall);   // north wall
+    this.addBox(  0, 1.5, 34, 44, 3, 2, wall);   // south wall (port road exit gap at center)
+
+    // Syrian mud-brick buildings (varied sizes)
+    const buildings = [
+      { x: 16, z:  4, w: 8, h: 4, d: 6 },
+      { x:-16, z:  4, w: 7, h: 3.5, d: 5 },
+      { x: 15, z: 22, w: 7, h: 3, d: 8 },
+      { x:-15, z: 22, w: 6, h: 4, d: 7 },
+      { x: 16, z:-10, w: 8, h: 4, d: 6 },
+      { x:-16, z:-10, w: 7, h: 3.5, d: 5 },
+      { x:  0, z:-10, w: 6, h: 3, d: 5 },
+    ];
+    for (const b of buildings) {
+      this.addBox(b.x, b.h/2, b.z, b.w, b.h, b.d, tan);
+      this.addBox(b.x, b.h + 0.12, b.z, b.w + 0.2, 0.24, b.d + 0.2, roofC);
+    }
+
+    // Church building (central-north) — larger with cross detail
+    this.addBox(0, 2.5, -4, 10, 5, 8, 0xd4c08a);
+    this.addBox(0, 5.12, -4, 10.2, 0.24, 8.2, 0xb09060);   // roof
+    // Cross on roof
+    this.addBox(0, 6.0, -4, 0.35, 1.5, 0.35, 0xd4a830);   // vertical
+    this.addBox(0, 6.5, -4, 1.1,  0.35, 0.35, 0xd4a830);   // horizontal
+    // Church door marker (darker patch)
+    this.addBox(0, 1.2, -0.05, 1.4, 2.4, 0.15, 0x5a3a18);
+
+    // Market stalls
+    for (let i = -1; i <= 1; i++) {
+      this.addBox(i * 5, 1.0, 28, 2, 0.1, 1.3, 0x9a7040);   // table
+      this.addBox(i * 5, 2.1, 28, 2.5, 0.12, 1.6, [0xcc6030, 0x408040, 0x4040a0][i+1]);  // awning
+    }
+
+    // River strip in far north
+    const riverMat = new THREE.MeshStandardMaterial({ color: 0x4a8ab0, roughness: 0.3, metalness: 0.1 });
+    const river = new THREE.Mesh(new THREE.PlaneGeometry(60, 8), riverMat);
+    river.rotation.x = -Math.PI / 2;
+    river.position.set(0, 0.05, -22);
+    this.scene.add(river);
+
+    // Road south to port (Seleucia gate)
+    this.addBox(0, 0.05, 30, 5, 0.1, 8, 0xc0a060);   // road
+    // Port gate pillars
+    this.addBox(-3.5, 2.5, 34, 1, 5, 1, 0xb09060);
+    this.addBox( 3.5, 2.5, 34, 1, 5, 1, 0xb09060);
+    this.addBox(   0, 5.2, 34, 8, 0.4, 1, 0xb09060);  // lintel
+
+    // Palm trees
+    const palmSpots = [[-10,-8],[10,-8],[-18,18],[18,18],[-5,28],[5,28]];
+    for (const [px, pz] of palmSpots) this.addPalm(px, pz);
+
+    // Lamp posts
+    const lamps = [[-8,8],[8,8],[-8,20],[8,20],[0,0]];
+    for (const [lx,lz] of lamps) this.addDecoration({ type:'lamp', x:lx, z:lz });
+  },
+
+  updateAntiochChecks(pos) {
+    // Church door entry check
+    if (!this.antiochChurchEntered && !this.dialogueActive && !this.choiceActive &&
+        Math.abs(pos.x) < 1.5 && pos.z > -3 && pos.z < 1) {
+      this.antiochChurchEntered = true;
+      if (this.antiochAllMet) {
+        this.showCommissioningScene();
+      } else {
+        const remaining = 5 - this.antiochLeadersMet;
+        this.showNotification('The church gathers here to pray.\nMeet all ' + remaining + ' more leader(s) first.');
+        this.antiochChurchEntered = false; // allow re-entry
+      }
+    }
+
+    // Port gate departure (after commissioning)
+    if (this.antiochCommissioned && pos.z > 36 && !this.voyageActive) {
+      this.loadSeaVoyage();
+    }
+  },
+
+  showCommissioningScene() {
+    this.antiochCommissioned = true;
+    this.dialogueActive = true;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;transition:background 1.5s ease;';
+    document.body.appendChild(ov);
+    requestAnimationFrame(() => { ov.style.background = 'rgba(0,0,0,0.92)'; });
+
+    const mk = (html, css) => {
+      const d = document.createElement('div');
+      d.innerHTML = html;
+      d.style.cssText = css + 'opacity:0;transition:opacity 1.2s ease;';
+      ov.appendChild(d);
+      return d;
+    };
+
+    const t1 = mk('The Commissioning', 'color:#c9a84c;font-size:clamp(1.8rem,5vw,2.5rem);font-weight:700;letter-spacing:0.12em;margin-bottom:8px;');
+    const t2 = mk('"While they were worshipping the Lord and fasting, the Holy Spirit said:<br><em>\'Set apart for me Barnabas and Saul for the work to which I have called them.\'"</em>',
+      'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f0e0b0;font-size:clamp(0.95rem,2.4vw,1.15rem);max-width:520px;line-height:1.9;margin-bottom:16px;');
+    const t3 = mk('<span style="font-size:0.82em;color:#9a8050">— Acts 13:2</span>',
+      'color:#9a8050;margin-bottom:28px;');
+    const t4 = mk('"They fasted and prayed, laid hands on them, and sent them off." — Acts 13:3',
+      'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8b880;font-size:clamp(0.85rem,2.2vw,1rem);max-width:460px;line-height:1.8;margin-bottom:28px;');
+    const t5 = mk('&#9654; Destination: Cyprus', 'color:#7ab0d4;font-size:clamp(1rem,2.8vw,1.3rem);letter-spacing:0.18em;');
+
+    setTimeout(() => { t1.style.opacity = '1'; }, 600);
+    setTimeout(() => { t2.style.opacity = '1'; }, 1400);
+    setTimeout(() => { t3.style.opacity = '1'; }, 2200);
+    setTimeout(() => { t4.style.opacity = '1'; }, 3000);
+    setTimeout(() => { t5.style.opacity = '1'; }, 4000);
+
+    setTimeout(() => {
+      ov.style.transition = 'opacity 1.5s ease';
+      ov.style.opacity = '0';
+      setTimeout(() => {
+        if (ov.parentNode) ov.remove();
+        this.dialogueActive = false;
+        this.showNotification('Walk south through the port gate\nto set sail for Cyprus!');
+        if (this.elQuestText) this.elQuestText.textContent = 'Go to the Seleucia port gate';
+      }, 1600);
+    }, 6000);
+  },
+
+  // ═══════════════════════════════════════
+  //  2. SEA VOYAGE MINI-GAME
+  // ═══════════════════════════════════════
+  loadSeaVoyage() {
+    this.currentScene = 'sea';
+    this.journeyPhase = 3;
+    this.teardownScene();
+    this.antiochActive  = false;
+    this.runnerActive   = false;
+    this.mtnPassActive  = false;
+    this.voyageActive   = true;
+    this.voyageTime     = 0;
+    this.voyageTimeLimit = 75;
+    this.voyageLives    = 3;
+    this.voyageFinished = false;
+    this.voyageBoatX    = 0;
+    this.voyageBoatTargetX = 0;
+    this.voyageSpeed    = 3.5;
+    this.voyageInvincible = 0;
+    this.voyageObstacles = [];
+    this.voyageScrolls   = [];
+    this.voyagePrevJoy   = false;
+
+    // Sea atmosphere
+    this.scene.background = new THREE.Color(0x1a5a8a);
+    this.scene.fog = new THREE.FogExp2(0x1a5a8a, 0.018);
+
+    const hemi = new THREE.HemisphereLight(0x7ab8e0, 0x204070, 0.8);
+    this.scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffe080, 1.4);
+    sun.position.set(80, 60, -50);
+    this.scene.add(sun);
+
+    // Build ocean waves (flat animated planes at varying heights)
+    this.voyageWaves = [];
+    for (let i = 0; i < 14; i++) {
+      const wGeo = new THREE.PlaneGeometry(30 + Math.random() * 20, 3 + Math.random() * 2);
+      const wMat = new THREE.MeshStandardMaterial({
+        color: 0x1a6aaa, roughness: 0.3, metalness: 0.15,
+        transparent: true, opacity: 0.7 + Math.random() * 0.25,
+      });
+      const wave = new THREE.Mesh(wGeo, wMat);
+      wave.rotation.x = -Math.PI / 2;
+      wave.position.set((Math.random() - 0.5) * 40, -0.1, (Math.random() - 0.5) * 50 + 10);
+      wave._phase = Math.random() * Math.PI * 2;
+      wave._amp   = 0.12 + Math.random() * 0.1;
+      this.scene.add(wave);
+      this.voyageWaves.push(wave);
+    }
+
+    // Build boat
+    const boatGrp = new THREE.Group();
+    // Hull
+    const hull = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 0.6, 3.2),
+      new THREE.MeshStandardMaterial({ color: 0x7a5020, roughness: 0.9 })
+    );
+    hull.position.y = 0.3;
+    boatGrp.add(hull);
+    // Mast
+    const mast = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.06, 3.2, 6),
+      new THREE.MeshStandardMaterial({ color: 0x5a3010 })
+    );
+    mast.position.set(0, 2.2, 0);
+    boatGrp.add(mast);
+    // Sail
+    const sailGeo = new THREE.BufferGeometry();
+    const sailVerts = new Float32Array([0,0,0, 0,2.4,0, 1.4,0,0]);
+    sailGeo.setAttribute('position', new THREE.BufferAttribute(sailVerts, 3));
+    sailGeo.setIndex([0,1,2]);
+    sailGeo.computeVertexNormals();
+    const sail = new THREE.Mesh(sailGeo, new THREE.MeshStandardMaterial({ color: 0xe8d8b0, side: THREE.DoubleSide }));
+    sail.position.set(0, 0.8, 0);
+    boatGrp.add(sail);
+
+    boatGrp.position.set(0, 0.2, 5);
+    boatGrp.rotation.y = Math.PI;
+    this.voyageBoat = boatGrp;
+    this.scene.add(boatGrp);
+
+    // Rocks
+    for (let i = 0; i < 6; i++) {
+      const r = 0.5 + Math.random() * 0.4;
+      const rock = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 7, 6),
+        new THREE.MeshStandardMaterial({ color: 0x707060, roughness: 0.95 })
+      );
+      rock.position.set(
+        (Math.random() - 0.5) * 12,
+        0.1,
+        -15 - i * 12 + Math.random() * 6
+      );
+      rock._r = r + 0.5;
+      this.voyageObstacles.push(rock);
+      this.scene.add(rock);
+    }
+
+    // Cyprus island (far end)
+    const islandGrp = new THREE.Group();
+    const isl = new THREE.Mesh(
+      new THREE.BoxGeometry(18, 1.2, 12),
+      new THREE.MeshStandardMaterial({ color: 0xd4b87a, roughness: 0.95 })
+    );
+    isl.position.y = 0;
+    islandGrp.add(isl);
+    // Some hills
+    for (let i = 0; i < 5; i++) {
+      const hill = new THREE.Mesh(
+        new THREE.SphereGeometry(1.5 + Math.random(), 7, 6),
+        new THREE.MeshStandardMaterial({ color: 0x7a9a50, roughness: 0.9 })
+      );
+      hill.position.set((Math.random()-0.5)*12, 1.2, (Math.random()-0.5)*6);
+      islandGrp.add(hill);
+    }
+    islandGrp.position.set(0, 0, -90);
+    this.scene.add(islandGrp);
+    this.voyageCyprus = islandGrp;
+
+    // Camera for top-down voyage view
+    this.player.pos.set(0, 10, 20);
+    this.cam.pos.set(0, 18, 22);
+    this.camera.position.set(0, 18, 22);
+    this.camera.lookAt(0, 0, 0);
+
+    // HUD
+    document.getElementById('hud').style.display = 'none';
+    const seaHud = document.getElementById('sea-hud');
+    if (seaHud) seaHud.classList.remove('hidden');
+    this.updateSeaLivesHUD();
+
+    document.getElementById('location-name').textContent = 'Seleucia \u2192 Cyprus';
+
+    // Controls — use runner lane system repurposed for X movement
+    this.initVoyageControls();
+
+    this.showQuestPopup(
+      'Seleucia to Cyprus',
+      'Steer the boat to avoid rocks. Reach Cyprus safely!',
+      'Acts 13:4 — 160km'
+    );
+  },
+
+  updateSeaLivesHUD() {
+    const el = document.getElementById('sea-lives');
+    if (!el) return;
+    let html = '';
+    for (let i = 0; i < 3; i++) {
+      html += '<span style="color:' + (i < this.voyageLives ? '#c9a84c' : '#333') + ';font-size:1.3rem;">&#9875;</span> ';
+    }
+    el.innerHTML = html;
+  },
+
+  initVoyageControls() {
+    // Reuse existing key handler — voyageBoatTargetX updated in updateSeaVoyage
+    this.voyageKeyLeft  = false;
+    this.voyageKeyRight = false;
+    this.voyageKeyUp    = false;
+    this.voyageKeyDown  = false;
+  },
+
+  updateSeaVoyage(dt) {
+    if (!this.voyageActive || this.voyageFinished || this.dialogueActive) {
+      // Still animate waves
+      this._animVoyageWaves(dt);
+      return;
+    }
+
+    this.voyageTime += dt;
+    const pct = Math.min(this.voyageTime / this.voyageTimeLimit, 1.0);
+
+    // Progress bar
+    const fill = document.getElementById('sea-progress-fill');
+    if (fill) fill.style.width = (pct * 100) + '%';
+
+    // Key / joystick input for up/down/left/right
+    let dx = 0, dz = 0;
+    if (this.keys['ArrowLeft']  || this.keys['a'] || this.keys['A']) dx -= 1;
+    if (this.keys['ArrowRight'] || this.keys['d'] || this.keys['D']) dx += 1;
+    if (this.keys['ArrowUp']    || this.keys['w'] || this.keys['W']) dz -= 1;
+    if (this.keys['ArrowDown']  || this.keys['s'] || this.keys['S']) dz += 1;
+
+    if (this.joy.active && this.joy.mag > 0.15) {
+      dx += Math.cos(this.joy.angle) * this.joy.mag;
+      dz += Math.sin(this.joy.angle) * this.joy.mag;
+    }
+
+    // Move boat
+    const bx = this.voyageBoat.position.x + dx * 5.5 * dt;
+    const bz = this.voyageBoat.position.z + dz * 5.5 * dt;
+    this.voyageBoat.position.x = Math.max(-9, Math.min(9, bx));
+    this.voyageBoat.position.z = Math.max(-88, Math.min(12, bz));
+
+    // Auto-advance toward Cyprus
+    const autoSpeed = 3 + pct * 4;
+    this.voyageBoat.position.z -= autoSpeed * dt;
+
+    // Waves animation
+    this._animVoyageWaves(dt);
+
+    // Invincibility cooldown
+    if (this.voyageInvincible > 0) this.voyageInvincible -= dt;
+
+    // Collision with rocks
+    if (this.voyageInvincible <= 0) {
+      for (const rock of this.voyageObstacles) {
+        const ddx = this.voyageBoat.position.x - rock.position.x;
+        const ddz = this.voyageBoat.position.z - rock.position.z;
+        const dist = Math.sqrt(ddx*ddx + ddz*ddz);
+        if (dist < rock._r + 0.9) {
+          this.voyageLives--;
+          this.voyageInvincible = 2.5;
+          this.updateSeaLivesHUD();
+          this.showNotification('Hit a rock! ' + this.voyageLives + ' lives left.');
+          // Flash boat red
+          this.voyageBoat.traverse(c => { if (c.isMesh) { c._origColor = c.material.color.getHex(); c.material.color.set(0xff2020); } });
+          setTimeout(() => {
+            this.voyageBoat.traverse(c => { if (c.isMesh && c._origColor !== undefined) c.material.color.setHex(c._origColor); });
+          }, 500);
+          if (this.voyageLives <= 0) {
+            this.voyageFinished = true;
+            setTimeout(() => {
+              this.showNotification('The voyage was rough.\nBut God is faithful.\nSailing again...');
+              setTimeout(() => { this.loadSeaVoyage(); }, 2500);
+            }, 500);
+            return;
+          }
+          break;
+        }
+      }
+    }
+
+    // Camera follows boat
+    this.camera.position.set(this.voyageBoat.position.x * 0.3, 16, this.voyageBoat.position.z + 18);
+    this.camera.lookAt(this.voyageBoat.position.x, 0, this.voyageBoat.position.z - 5);
+
+    // Reached Cyprus
+    if (this.voyageBoat.position.z < -80) {
+      this.voyageFinished = true;
+      this.voyageActive   = false;
+      this.showNotification('Cyprus in sight! Arriving at Salamis...');
+      setTimeout(() => { this.loadSalamis(); }, 2500);
+    }
+  },
+
+  _animVoyageWaves(dt) {
+    if (!this.voyageWaves) return;
+    const t = performance.now() * 0.001;
+    for (const w of this.voyageWaves) {
+      w.position.y = Math.sin(t * 0.8 + w._phase) * w._amp;
+    }
+  },
+
+  // ═══════════════════════════════════════
+  //  3. SALAMIS SYNAGOGUE
+  // ═══════════════════════════════════════
+  loadSalamis() {
+    this.currentScene = 'salamis';
+    this.journeyPhase = 4;
+    this.teardownScene();
+    this.voyageActive  = false;
+    this.runnerActive  = false;
+    this.mtnPassActive = false;
+
+    this.scene.background = new THREE.Color(0x1a1208);
+    this.scene.fog = new THREE.FogExp2(0x1a1208, 0.04);
+
+    // Warm torchlight
+    const amb = new THREE.AmbientLight(0x4a3010, 0.4);
+    this.scene.add(amb);
+    const torch1 = new THREE.PointLight(0xff9040, 1.2, 14);
+    torch1.position.set(-6, 3.5, -5);
+    this.scene.add(torch1);
+    const torch2 = new THREE.PointLight(0xff9040, 1.2, 14);
+    torch2.position.set( 6, 3.5, -5);
+    this.scene.add(torch2);
+    const torch3 = new THREE.PointLight(0xff8030, 1.0, 14);
+    torch3.position.set(0, 3.5, 8);
+    this.scene.add(torch3);
+
+    // Dark wood floor
+    this.addGround(0x2a1a08, 80);
+
+    // Walls
+    this.addBox(0,  2.5, -12, 22, 5, 0.5, 0x3a2810);   // front wall
+    this.addBox(0,  2.5,  10, 22, 5, 0.5, 0x3a2810);   // back wall
+    this.addBox(-11, 2.5,  -1, 0.5, 5, 22, 0x3a2810);  // left
+    this.addBox( 11, 2.5,  -1, 0.5, 5, 22, 0x3a2810);  // right
+
+    // Benches
+    for (let i = -3; i <= 3; i += 2) {
+      this.addBox(i * 1.6, 0.3, 3, 1.4, 0.3, 5.5, 0x5a3a18);
+    }
+
+    // Torah scroll cabinet
+    this.addBox(0, 1.5, -10, 3.5, 3, 1.2, 0x6a4a20);
+    this.addBox(0, 3.2, -10, 3.6, 0.2, 1.3, 0x5a3a10);  // top
+
+    // Torch poles
+    for (const [tx, tz] of [[-6, -5], [6, -5], [0, 8]]) {
+      this.addBox(tx, 1.8, tz, 0.12, 3.5, 0.12, 0x5a3a10);
+      // Flame glow sphere
+      const flame = new THREE.Mesh(
+        new THREE.SphereGeometry(0.18, 6, 5),
+        new THREE.MeshStandardMaterial({ color: 0xff8820, emissive: new THREE.Color(0xff5510), emissiveIntensity: 2 })
+      );
+      flame.position.set(tx, 3.5, tz);
+      this.scene.add(flame);
+    }
+
+    // NPC — Synagogue Ruler
+    this.spawnNPC({
+      id: 'salamis_ruler', name: 'Synagogue Ruler',
+      x: 0, z: -8,
+      bodyColor: 0x4a3070, accentColor: 0x9a80b0, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Synagogue Ruler', text: '"Visitors — you are welcome to speak if you have a word for us. We have just finished reading from Isaiah."' },
+        { speaker: 'Synagogue Ruler', text: '"Paul rose and spoke of a Savior from the line of David — the synagogues of Salamis heard the message of Jesus." — Acts 13:5' },
+      ],
+      onComplete: 'salamis_done',
+    });
+
+    // John Mark as helper
+    this.spawnNPC({
+      id: 'john_mark_helper', name: 'John Mark',
+      x: -4, z: -2,
+      bodyColor: 0x5a7a4a, accentColor: 0x8aaa70, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'John Mark', text: '"John Mark served as helper to Paul and Barnabas throughout Cyprus." — Acts 13:5' },
+      ],
+    });
+
+    // Player placement
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Salamis, Cyprus';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 13:5';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak to the Synagogue Ruler';
+
+    this.showQuestPopup(
+      'Salamis, Cyprus',
+      'Paul and Barnabas proclaimed the word of God in the synagogues of the Jews.',
+      'Acts 13:5'
+    );
+  },
+
+  // ═══════════════════════════════════════
+  //  4. PAPHOS — ELYMAS CONFRONTATION
+  // ═══════════════════════════════════════
+  loadPaphos() {
+    this.currentScene = 'paphos';
+    this.journeyPhase = 5;
+    this.teardownScene();
+    this.voyageActive  = false;
+    this.runnerActive  = false;
+    this.mtnPassActive = false;
+
+    this.scene.background = new THREE.Color(0x6a9ab0);
+    this.scene.fog = new THREE.FogExp2(0xd0e0ee, 0.018);
+
+    this.addSceneLights(0xb0d0f0, 0xffeebb, 50, 40, 30);
+    this.addGround(0xd0b890);
+
+    this.buildPaphosWorld();
+
+    // NPCs
+    this.spawnNPC({
+      id: 'sergius_paulus', name: 'Sergius Paulus',
+      x: 0, z: -12,
+      bodyColor: 0xc0a060, accentColor: 0x8a1818, headColor: 0xc0a070,
+      dialogues: [
+        { speaker: 'Sergius Paulus', text: '"I am Sergius Paulus, Proconsul of Cyprus. I have heard reports of your teaching and summoned you here myself. I am an intelligent man — I want to hear the word of God for myself." — Acts 13:7' },
+        { speaker: 'Sergius Paulus', text: '"But be warned — my advisor Bar-Jesus has told me your message is dangerous. He stands ready to counter everything you say." — Acts 13:8' },
+      ],
+      onComplete: 'meet_proconsul',
+    });
+
+    this.spawnNPC({
+      id: 'elymas', name: 'Bar-Jesus (Elymas)',
+      x: 5, z: -9,
+      bodyColor: 0x1a1a2a, accentColor: 0x3a3a5a, headColor: 0x8a7050,
+      dialogues: [
+        { speaker: 'Bar-Jesus', text: '"I am Bar-Jesus, counselor to the proconsul. I have studied the mysteries of heaven and earth for thirty years. What you teach is a dangerous delusion." — Acts 13:6' },
+        { speaker: 'Bar-Jesus', text: '"You will not turn Sergius Paulus from the wisdom of the ages. Leave this place, Jew. Your prophet was executed as a criminal." — Acts 13:8' },
+      ],
+      onComplete: 'challenge_elymas',
+    });
+
+    // Player placement
+    this.player.pos.set(0, 0, 5);
+    this.playerGroup.position.set(0, 0, 5);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 17);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Paphos, Cyprus';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 13:6-12';
+    if (this.elQuestText) this.elQuestText.textContent = 'Meet the Proconsul';
+
+    this.showQuestPopup(
+      'Paphos, Cyprus',
+      'At the western end of Cyprus, the Roman proconsul Sergius Paulus wants to hear the word of God.',
+      'Acts 13:6-7'
+    );
+  },
+
+  buildPaphosWorld() {
+    // Roman courtyard with columns
+    // Floor tiles (red/purple)
+    for (let r = -3; r <= 3; r++) {
+      for (let c = -6; c <= 1; c++) {
+        const color = (r + c) % 2 === 0 ? 0x9a2020 : 0x7a1080;
+        this.addBox(r * 2.5, 0.06, c * 2.5, 2.45, 0.12, 2.45, color, false);
+      }
+    }
+
+    // Columns along sides
+    for (let ci = -3; ci <= 3; ci += 1.5) {
+      this.addBox(-9, 2, ci * 2.5, 0.6, 4, 0.6, 0xe0d8c8);
+      this.addBox( 9, 2, ci * 2.5, 0.6, 4, 0.6, 0xe0d8c8);
+      // Column capitals
+      this.addBox(-9, 4.1, ci * 2.5, 0.9, 0.22, 0.9, 0xd0c8b0);
+      this.addBox( 9, 4.1, ci * 2.5, 0.9, 0.22, 0.9, 0xd0c8b0);
+    }
+
+    // Grand hall front wall
+    this.addBox(0, 3, -18, 20, 6, 1.5, 0xd0c8b0);
+    // Pediment
+    this.addBox(0, 6.5, -18, 20, 0.5, 2, 0xc0b8a0);
+
+    // Proconsul's raised platform
+    this.addBox(0, 0.25, -13, 8, 0.5, 4, 0xc8b898);
+
+    // Throne/chair
+    this.addBox(0, 0.85, -14, 1.8, 1.2, 1.8, 0x8a6820);
+    this.addBox(0, 1.7, -14, 1.8, 0.2, 0.3, 0xaa8840);  // back
+
+    // Side walls
+    this.addBox(-11, 3, -7, 2, 6, 28, 0xd0c8b0);
+    this.addBox( 11, 3, -7, 2, 6, 28, 0xd0c8b0);
+  },
+
+  showElymasJudgment() {
+    this.elymosBlinded = true;
+    this.dialogueActive = true;
+
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;';
+    document.body.appendChild(ov);
+
+    const mk = (html, css) => {
+      const d = document.createElement('div');
+      d.innerHTML = html;
+      d.style.cssText = css + 'opacity:0;transition:opacity 1.2s ease;';
+      ov.appendChild(d);
+      return d;
+    };
+
+    const t1 = mk('"You son of the devil, you enemy of all righteousness, full of all deceit and villainy, will you not stop making crooked the straight paths of the Lord?"',
+      'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f0d090;font-size:clamp(0.95rem,2.5vw,1.15rem);max-width:560px;line-height:1.9;margin-bottom:12px;');
+    const t2 = mk('"And now, behold, the hand of the Lord is upon you, and you will be blind and unable to see the sun for a time." — Acts 13:10-11',
+      'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#e0c080;font-size:clamp(0.9rem,2.3vw,1.05rem);max-width:540px;line-height:1.8;margin-bottom:24px;');
+
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;inset:0;z-index:210;background:white;opacity:0;pointer-events:none;transition:opacity 0.15s;';
+    document.body.appendChild(flash);
+
+    const t3 = mk('"Immediately mist and darkness fell on him and he went about seeking people to lead him by the hand." — Acts 13:11',
+      'font-family:Crimson Text,Georgia,serif;color:#c8b880;font-size:clamp(0.85rem,2.2vw,1rem);max-width:500px;line-height:1.8;margin-bottom:20px;');
+    const t4 = mk('"When the proconsul saw what had occurred, he believed, astonished at the teaching of the Lord." — Acts 13:12',
+      'font-family:Crimson Text,Georgia,serif;color:#90c0e0;font-size:clamp(0.85rem,2.2vw,1rem);max-width:500px;line-height:1.8;margin-bottom:20px;');
+    const t5 = mk('Saul, who was also called <strong>Paul</strong>',
+      'color:#c9a84c;font-size:clamp(1.2rem,3.5vw,1.8rem);font-weight:700;letter-spacing:0.12em;');
+    const t6 = mk('— Acts 13:9. From this point forward, he is known as Paul.',
+      'color:#9a8050;font-size:clamp(0.75rem,2vw,0.88rem);letter-spacing:0.1em;');
+
+    setTimeout(() => { t1.style.opacity = '1'; }, 400);
+    setTimeout(() => { t2.style.opacity = '1'; }, 1600);
+    setTimeout(() => {
+      flash.style.opacity = '1';
+      setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 400); }, 250);
+    }, 2800);
+    setTimeout(() => { t3.style.opacity = '1'; }, 3100);
+    setTimeout(() => { t4.style.opacity = '1'; }, 4200);
+    setTimeout(() => { t5.style.opacity = '1'; }, 5200);
+    setTimeout(() => { t6.style.opacity = '1'; }, 5900);
+
+    this.nameChanged  = true;
+    this.playerName   = 'Paul';
+    this.sergiusBelieved = true;
+
+    setTimeout(() => {
+      ov.style.transition = 'opacity 1.5s';
+      ov.style.opacity = '0';
+      setTimeout(() => {
+        if (ov.parentNode) ov.remove();
+        this.dialogueActive = false;
+        document.getElementById('location-name').textContent = 'Paphos — Complete';
+        this.showQuestPopup(
+          'Paul sets sail from Cyprus',
+          'The proconsul believed. Cyprus is changed. Next: Perga in Pamphylia.',
+          'Acts 13:12-13'
+        );
+        setTimeout(() => { this.loadPerga(); }, 1000);
+      }, 1600);
+    }, 7500);
+  },
+
+  // ═══════════════════════════════════════
+  //  5. PERGA — JOHN MARK DEPARTS
+  // ═══════════════════════════════════════
+  loadPerga() {
+    this.currentScene = 'perga';
+    this.journeyPhase = 6;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0x7ab0d0);
+    this.scene.fog = new THREE.FogExp2(0xd0e8f0, 0.022);
+
+    this.addSceneLights(0xc0ddf0, 0xffe090, 40, 30, 20);
+    this.addGround(0xc8b880);
+
+    // Simple coastal buildings
+    this.addBox(-8, 2, -5, 6, 4, 5, 0xd4c08a);
+    this.addBox( 8, 2, -5, 6, 4, 5, 0xd4c08a);
+    this.addBox( 0, 2,-10, 5, 4, 4, 0xc0aa70);
+
+    // Road going north (inland)
+    this.addBox(0, 0.05, 5, 4, 0.1, 20, 0xb0a060);
+
+    // John Mark NPC
+    this.spawnNPC({
+      id: 'john_mark_perga', name: 'John Mark',
+      x: -3, z: 5,
+      bodyColor: 0x5a7a4a, accentColor: 0x8aaa70, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'John Mark', text: '"Paul... Barnabas... I cannot continue. The road ahead goes deep into the mountains — bandit country. And the mission is changing in ways I did not expect. I must return to Jerusalem." — Acts 13:13' },
+        { speaker: 'John Mark', text: '"Forgive me. I did not foresee this. God willing, we will meet again."' },
+      ],
+      onComplete: 'john_mark_departs',
+    });
+
+    // Barnabas NPC
+    this.spawnNPC({
+      id: 'barnabas_perga', name: 'Barnabas',
+      x: 3, z: 3,
+      bodyColor: 0x8a5c2c, accentColor: 0xc49050, headColor: 0xb07840,
+      dialogues: [
+        { speaker: 'Barnabas', text: '"Paul, the road to Pisidian Antioch runs through the Taurus Mountains. It will be a hard journey — but God has called us forward."' },
+      ],
+    });
+
+    this.player.pos.set(0, 0, 12);
+    this.playerGroup.position.set(0, 0, 12);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 24);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Perga, Pamphylia';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 13:13';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak to John Mark';
+
+    this.showQuestPopup(
+      'Perga — A Difficult Decision',
+      'Paul and his company arrived in Perga. It was here that John Mark made a fateful decision.',
+      'Acts 13:13'
+    );
+  },
+
+  // ═══════════════════════════════════════
+  //  6. TAURUS MOUNTAIN PASS RUNNER
+  // ═══════════════════════════════════════
+  loadMountainPass() {
+    this.currentScene = 'mountain';
+    this.journeyPhase = 6;
+
+    this.teardownScene();
+    this.voyageActive  = false;
+    this.antiochActive = false;
+
+    // Reuse the full runner system
+    this.runnerActive     = true;
+    this.runnerFinished   = false;
+    this.runnerLane       = 1;
+    this.runnerTargetLane = 1;
+    this.runnerSpeed      = 7;
+    this.runnerTime       = 0;
+    this.runnerTimeLimit  = 90;
+    this.runnerJumping    = false;
+    this.runnerJumpY      = 0;
+    this.runnerJumpVel    = 0;
+    this.runnerLives      = 3;
+    this.runnerInvincible = 0;
+    this.runnerObstacles  = [];
+    this.runnerCoins      = [];
+    this.runnerRoadMeshes = [];
+    this.runnerNextZ      = 28;
+    this.runnerShake      = 0;
+    this.runnerSlowed     = 0;
+    this.runnerDoubleCoin = 0;
+    this.runnerMultiplier = 1;
+    this.runnerMultiplierTimer = 0;
+    this.runnerMilestones = [30, 60, 90];
+    this.runnerMilestonePrev = 0;
+    this.runnerEndLight   = null;
+    this.encounterTriggered = false;
+    this.runnerHorse      = null;   // no horse — Paul walks
+    this.runnerPaulRider  = null;
+    this._runnerMtnMode   = true;
+
+    // Grey mountain sky
+    this.scene.background = new THREE.Color(0x6a7a8a);
+    this.scene.fog = new THREE.Fog(0x8a9aaa, 25, 90);
+
+    const sunLight = new THREE.DirectionalLight(0xd0d8e0, 1.2);
+    sunLight.position.set(20, 40, -10);
+    sunLight.castShadow = true;
+    this.scene.add(sunLight);
+    const ambLight = new THREE.AmbientLight(0x8090a0, 0.5);
+    this.scene.add(ambLight);
+    this.runnerAmbientLight = ambLight;
+
+    // Mountain background peaks
+    for (let i = -4; i <= 4; i++) {
+      const h = 8 + Math.random() * 12;
+      const peak = new THREE.Mesh(
+        new THREE.ConeGeometry(4 + Math.random() * 3, h, 5),
+        new THREE.MeshStandardMaterial({ color: 0x7a7a8a, roughness: 0.95 })
+      );
+      peak.position.set(i * 12, h/2 + 1, this.player.pos.z - 40 - Math.random() * 20);
+      this.scene.add(peak);
+      // Snow cap
+      const snow = new THREE.Mesh(
+        new THREE.ConeGeometry(1.5, 2.5, 5),
+        new THREE.MeshStandardMaterial({ color: 0xe8eef2, roughness: 0.9 })
+      );
+      snow.position.set(i * 12, h + 1, peak.position.z);
+      this.scene.add(snow);
+    }
+
+    // Player — no horse mount
+    this.player.pos.set(0, 0, 5);
+    this.playerGroup.position.set(0, 0, 5);
+    this.playerGroup.position.y = 0;
+    this.cam.pos.set(0, 5.5, -1);
+
+    this.buildMtnPassStart();
+    this.initRunnerControls();
+
+    // Dust particles
+    this.runnerDustParticles = [];
+    for (let i = 0; i < 8; i++) {
+      const pm = new THREE.Mesh(
+        new THREE.SphereGeometry(0.07, 5, 4),
+        new THREE.MeshStandardMaterial({ color: 0x9a9080, transparent: true, opacity: 0.7 })
+      );
+      pm.visible = false; pm.life = 0; pm.maxLife = 0.4;
+      pm.vel = new THREE.Vector3();
+      this.scene.add(pm);
+      this.runnerDustParticles.push(pm);
+    }
+
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('runner-hud').classList.remove('hidden');
+    document.getElementById('jump-btn').style.display = '';
+    const isMobile = 'ontouchstart' in window;
+    if (isMobile) document.getElementById('runner-btns').classList.remove('hidden');
+    document.getElementById('location-name').textContent = 'Taurus Mountains';
+
+    const mEl = document.getElementById('runner-multiplier');
+    if (mEl) { mEl.style.display = 'none'; }
+    const dpEl = document.getElementById('damascus-progress');
+    if (dpEl) dpEl.style.display = '';
+    const dpFill = document.getElementById('damascus-progress-fill');
+    if (dpFill) dpFill.style.width = '0%';
+    const barLabel = document.getElementById('damascus-progress-label');
+    if (barLabel) barLabel.textContent = 'Pisidian Antioch';
+
+    this.showQuestPopup(
+      'The Taurus Mountains',
+      'The road to Pisidian Antioch cuts through dangerous mountain passes. Bandits, boulders, and treacherous terrain.',
+      '2 Corinthians 11:26'
+    );
+  },
+
+  buildMtnPassStart() {
+    const roadMat  = new THREE.MeshStandardMaterial({ color: 0x8a7a60, roughness: 0.98 });
+    const rockMat  = new THREE.MeshStandardMaterial({ color: 0x7a6a50, roughness: 0.95 });
+    const sideMat  = new THREE.MeshStandardMaterial({ color: 0x6a5a48, roughness: 1.0 });
+
+    for (let z = 5; z < 120; z += 8) {
+      // Narrow mountain path
+      const road = new THREE.Mesh(new THREE.BoxGeometry(6, 0.15, 8), roadMat);
+      road.position.set(0, 0, z);
+      road.receiveShadow = true;
+      this.scene.add(road);
+      this.runnerRoadMeshes.push({ mesh: road, z: z });
+
+      // Rocky sides
+      for (const sx of [-5.5, 5.5]) {
+        const side = new THREE.Mesh(new THREE.BoxGeometry(4, 1.5, 8), sideMat);
+        side.position.set(sx, 0.75, z);
+        this.scene.add(side);
+        this.runnerRoadMeshes.push({ mesh: side, z: z });
+      }
+    }
+  },
+
+  updateMtnPass(dt) {
+    // Delegate to existing runner update — it handles the same lane system
+    this.updateRunner(dt);
+
+    // Override progress bar label
+    const pct = Math.min(this.runnerTime / this.runnerTimeLimit, 1.0);
+    const dpFill = document.getElementById('damascus-progress-fill');
+    if (dpFill) dpFill.style.width = (pct * 100) + '%';
+  },
+
+  // ═══════════════════════════════════════
+  //  7. PISIDIAN ANTIOCH — SERMON GAME
+  // ═══════════════════════════════════════
+  loadPisidianAntioch() {
+    this.currentScene = 'pisidian';
+    this.journeyPhase = 7;
+    this.teardownScene();
+    this.runnerActive  = false;
+    this.mtnPassActive = false;
+    this.voyageActive  = false;
+    this._runnerMtnMode = false;
+    this.sermonScore   = 0;
+    this.sermonComplete = false;
+    this.pisidiaWeek2  = false;
+
+    this.scene.background = new THREE.Color(0xc8a860);
+    this.scene.fog = new THREE.FogExp2(0xd4b870, 0.02);
+
+    this.addSceneLights(0xf0c870, 0xffbb50, 60, 35, 25);
+    this.addGround(0xc4a460);
+
+    this.buildPisidianWorld();
+
+    // Player placement
+    this.player.pos.set(0, 0, 12);
+    this.playerGroup.position.set(0, 0, 12);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 24);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Pisidian Antioch';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 13:14-52';
+    if (this.elQuestText) this.elQuestText.textContent = 'Enter the synagogue to preach';
+
+    this.showQuestPopup(
+      'Pisidian Antioch — The Synagogue Sermon',
+      'On the Sabbath, Paul was invited to speak. His sermon in Acts 13 is one of the most complete records of early Christian preaching.',
+      'Acts 13:14-15'
+    );
+  },
+
+  buildPisidianWorld() {
+    const tan = 0xc4a870;
+
+    // City buildings
+    const cityBuildings = [
+      { x:-12, z:-5, w:7, h:4, d:6 }, { x:12, z:-5, w:7, h:4, d:6 },
+      { x:-12, z:10, w:6, h:3.5, d:5 }, { x:12, z:10, w:6, h:3.5, d:5 },
+    ];
+    for (const b of cityBuildings) {
+      this.addBox(b.x, b.h/2, b.z, b.w, b.h, b.d, tan);
+      this.addBox(b.x, b.h + 0.12, b.z, b.w+0.2, 0.24, b.d+0.2, 0x9a7848);
+    }
+
+    // Synagogue (prominent building)
+    this.addBox(0, 3, -8, 14, 6, 10, 0xd8c880);
+    this.addBox(0, 6.12, -8, 14.2, 0.24, 10.2, 0xb89848);
+    // Synagogue door
+    this.addBox(0, 1.5, -2.9, 2.2, 3, 0.2, 0x5a4020);
+
+    // Benches inside
+    for (let xi = -4; xi <= 4; xi += 2) {
+      this.addBox(xi, 0.3, -6, 1.5, 0.3, 5, 0x7a5a28);
+    }
+
+    // Market area
+    for (let i = -2; i <= 2; i++) {
+      this.addBox(i*3.5, 1.0, 20, 2, 0.1, 1.4, 0x9a7040);
+      this.addBox(i*3.5, 2.1, 20, 2.5, 0.12, 1.6, 0xcc8030);
+    }
+
+    // City gate (south entrance)
+    this.addBox(-4, 3, 28, 1, 6, 1, 0xb09060);
+    this.addBox( 4, 3, 28, 1, 6, 1, 0xb09060);
+    this.addBox( 0, 6.2, 28, 10, 0.4, 1, 0xb09060);
+
+    // NPCs for the scene
+    this.spawnNPC({
+      id: 'synagogue_ruler_p', name: 'Synagogue Ruler',
+      x: 0, z: -4,
+      bodyColor: 0x3a3070, accentColor: 0x7a70a0, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Synagogue Ruler', text: '"Brothers, if you have any word of encouragement for the people, please speak." — Acts 13:15' },
+      ],
+      onComplete: 'start_sermon',
+    });
+
+    this.spawnNPC({
+      id: 'jewish_leader_p', name: 'Jewish Leader',
+      x: -5, z: -5,
+      bodyColor: 0x2a3050, accentColor: 0x5060a0, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Jewish Leader', text: '"The whole city has gathered again! This is too much — we cannot allow this man to continue. He is stirring up the people." — Acts 13:44-45' },
+      ],
+    });
+
+    this.spawnNPC({
+      id: 'gentile_believer', name: 'Gentile Believer',
+      x: 5, z: 5,
+      bodyColor: 0x5a7060, accentColor: 0x8aa090, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Gentile Believer', text: '"When the Gentiles heard this, they began rejoicing and glorifying the word of the Lord." — Acts 13:48' },
+      ],
+    });
+  },
+
+  startSermonGame() {
+    this.sermonScore = 0;
+    const rounds = [
+      {
+        question: 'How do you open your sermon?',
+        options: [
+          { text: '"God chose our fathers and exalted the people in Egypt."', correct: true, verse: 'Acts 13:17' },
+          { text: '"Let me tell you about a man named Jesus."', correct: false },
+          { text: '"You must abandon the Law of Moses."', correct: false },
+        ],
+      },
+      {
+        question: 'How do you connect the Old Testament to Jesus?',
+        options: [
+          { text: '"From David\'s offspring, God has brought to Israel a Savior, Jesus, as he promised."', correct: true, verse: 'Acts 13:23' },
+          { text: '"The prophecies are complex — you would not understand them."', correct: false },
+          { text: '"Forget what you know — start completely fresh."', correct: false },
+        ],
+      },
+      {
+        question: 'The leaders in Jerusalem crucified Jesus — what do you say?',
+        options: [
+          { text: '"Though they found no cause of death in him, they asked Pilate to have him executed. But God raised him from the dead."', correct: true, verse: 'Acts 13:28-30' },
+          { text: '"The Romans are to blame, not us."', correct: false },
+          { text: '"It was a necessary evil."', correct: false },
+        ],
+      },
+      {
+        question: 'How do you close the sermon?',
+        options: [
+          { text: '"Through this man forgiveness of sins is proclaimed to you — freed from everything you could not be freed from by the law of Moses."', correct: true, verse: 'Acts 13:38-39' },
+          { text: '"Join our group and you will be safe."', correct: false },
+          { text: '"The law is completely abolished."', correct: false },
+        ],
+      },
+    ];
+
+    let currentRound = 0;
+    this.dialogueActive = true;
+
+    const container = document.getElementById('sermon-game');
+    const questionEl = document.getElementById('sermon-question');
+    const optionsEl  = document.getElementById('sermon-options');
+    const scoreEl    = document.getElementById('sermon-score-bar');
+
+    if (!container) {
+      // Fallback: just skip to opposition
+      this.sermonScore = 4;
+      this.showPisidianOpposition();
+      return;
+    }
+
+    container.classList.remove('hidden');
+
+    const showRound = (idx) => {
+      if (idx >= rounds.length) {
+        container.classList.add('hidden');
+        this.dialogueActive = false;
+        this.sermonComplete = true;
+        this.showPisidianOpposition();
+        return;
+      }
+      const round = rounds[idx];
+      questionEl.textContent = round.question;
+      optionsEl.innerHTML = '';
+      scoreEl.textContent  = 'Score: ' + this.sermonScore + '/4';
+
+      const shuffled = [...round.options].sort(() => Math.random() - 0.5);
+      for (const opt of shuffled) {
+        const btn = document.createElement('button');
+        btn.className = 'sermon-option';
+        btn.textContent = opt.text;
+        btn.addEventListener('click', () => {
+          if (opt.correct) {
+            this.sermonScore++;
+            btn.classList.add('sermon-correct');
+            const fb = document.createElement('div');
+            fb.className = 'sermon-feedback sermon-right';
+            fb.textContent = 'Correct! ' + (opt.verse || '');
+            optionsEl.appendChild(fb);
+          } else {
+            btn.classList.add('sermon-wrong');
+            const fb = document.createElement('div');
+            fb.className = 'sermon-feedback sermon-missed';
+            fb.textContent = 'Not the strongest argument. The crowd murmurs.';
+            optionsEl.appendChild(fb);
+          }
+          // Disable all buttons
+          for (const b of optionsEl.querySelectorAll('.sermon-option')) b.disabled = true;
+          setTimeout(() => { showRound(idx + 1); }, 1600);
+        });
+        optionsEl.appendChild(btn);
+      }
+    };
+
+    showRound(0);
+  },
+
+  showPisidianOpposition() {
+    const score = this.sermonScore;
+    let resultText;
+    if (score >= 4) resultText = '"The whole city came together to hear the word of the Lord." — Acts 13:44';
+    else if (score >= 3) resultText = 'Many believed. A church was planted in Pisidian Antioch.';
+    else resultText = 'Some believed, though with questions. The message had been heard.';
+
+    this.showQuestPopup(
+      'Sabbath Complete — Week 2 Approaches',
+      resultText + '\n\nBut the Jewish leaders were filled with jealousy...',
+      'Acts 13:44-45'
+    );
+
+    const dismissBtn = document.getElementById('qp-dismiss');
+    if (dismissBtn) {
+      dismissBtn.onclick = () => {
+        document.getElementById('quest-popup').classList.add('hidden');
+        this.dialogueActive = false;
+        this.pisidiaWeek2 = true;
+
+        // Week 2: Opposition dialogue triggers, then Paul turns to Gentiles
+        setTimeout(() => {
+          this.startDialogue({
+            group: this.npcObjects['jewish_leader_p'] ? this.npcObjects['jewish_leader_p'].group : this.playerGroup,
+            data: {
+              id: 'pisidian_opposition',
+              name: 'Jewish Leader',
+              dialogues: [
+                { speaker: 'Jewish Leader', text: '"Enough! Who are you to tell us the Messiah has come? You blaspheme! — Acts 13:45' },
+                { speaker: 'Paul', text: '"It was necessary that the word of God be spoken to you first. Since you thrust it aside and judge yourselves unworthy of eternal life, behold, we are turning to the Gentiles." — Acts 13:46' },
+                { speaker: 'Paul', text: '"For so the Lord has commanded us: \'I have made you a light for the Gentiles, that you may bring salvation to the ends of the earth.\'" — Acts 13:47' },
+              ],
+              onComplete: 'pisidian_expelled',
+            },
+          });
+        }, 800);
+      };
+    }
+  },
+
+  // ═══════════════════════════════════════
+  //  8. ICONIUM
+  // ═══════════════════════════════════════
+  loadIconium() {
+    this.currentScene = 'iconium';
+    this.journeyPhase = 8;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0xb0c8a0);
+    this.scene.fog = new THREE.FogExp2(0xc0d8a8, 0.022);
+
+    this.addSceneLights(0xc0e0a0, 0xffd880, 40, 30, 20);
+    this.addGround(0xb0a060);
+
+    // Simple Phrygian city
+    const bldgs = [
+      {x:-10,z:-5,w:7,h:4,d:6},{x:10,z:-5,w:7,h:4,d:6},
+      {x:-10,z:10,w:6,h:3,d:5},{x:10,z:10,w:6,h:3,d:5},
+      {x:0,z:-10,w:8,h:5,d:6},
+    ];
+    for (const b of bldgs) {
+      this.addBox(b.x, b.h/2, b.z, b.w, b.h, b.d, 0xc4a870);
+      this.addBox(b.x, b.h+0.12, b.z, b.w+0.2, 0.24, b.d+0.2, 0x9a7848);
+    }
+    // Synagogue
+    this.addBox(0, 2.5, -7, 10, 5, 8, 0xd0c080);
+    this.addBox(0, 5.12, -7, 10.2, 0.24, 8.2, 0xb09848);
+    this.addBox(0, 1.3, -2.9, 1.8, 2.6, 0.2, 0x5a4020);
+
+    this.spawnNPC({
+      id: 'iconium_believer', name: 'Jewish Believer',
+      x: 3, z: 3,
+      bodyColor: 0x4a6a4a, accentColor: 0x8aaa70, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Jewish Believer', text: '"Great signs and wonders have been done here. Many believe — both Jews and Greeks." — Acts 14:1' },
+        { speaker: 'Jewish Believer', text: '"But there is a plot forming among those who rejected the message. They plan to stone you and Barnabas." — Acts 14:5' },
+      ],
+    });
+
+    this.spawnNPC({
+      id: 'iconium_hostile', name: 'Hostile Leader',
+      x: -5, z: 2,
+      bodyColor: 0x3a2040, accentColor: 0x6a4080, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Hostile Leader', text: '"Enough! The people are being divided by this man\'s teaching. The leaders of this city will not tolerate it." — Acts 14:2' },
+      ],
+    });
+
+    this.player.pos.set(0, 0, 12);
+    this.playerGroup.position.set(0, 0, 12);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 24);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Iconium';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 14:1-7';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak to the believers — then decide';
+
+    this.showQuestPopup(
+      'Iconium',
+      'A great many people believe. But opposition is forming. Stay longer, or flee to Lystra?',
+      'Acts 14:1-7'
+    );
+  },
+
+  // ═══════════════════════════════════════
+  //  9. LYSTRA
+  // ═══════════════════════════════════════
+  loadLystra() {
+    this.currentScene = 'lystra';
+    this.journeyPhase = 9;
+    this.teardownScene();
+    this.lystraPhase = 0;
+    this.stoneCount  = 0;
+
+    this.scene.background = new THREE.Color(0xa0c090);
+    this.scene.fog = new THREE.FogExp2(0xb8d0a0, 0.02);
+
+    this.addSceneLights(0xb0e0a0, 0xffdd80, 40, 30, 20);
+    this.addGround(0xb4a460);
+
+    this.buildLystraWorld();
+
+    this.spawnNPC({
+      id: 'lame_man', name: 'Lame Man',
+      x: 3, z: 8,
+      bodyColor: 0x8a7050, accentColor: 0xb09070, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Lame Man', text: '"I have not walked since I was born. I sit here every day and listen to the teachers." — Acts 14:8' },
+        { speaker: 'Lame Man', text: '"There is something about you, teacher. I believe what you say about this Jesus."' },
+      ],
+      onComplete: 'heal_lame_man',
+    });
+
+    this.spawnNPC({
+      id: 'lystra_citizen', name: 'Citizen of Lystra',
+      x: -5, z: 6,
+      bodyColor: 0x6a7a50, accentColor: 0x9aaa80, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Citizen of Lystra', text: '"We have never seen anything like this before. The gods themselves have come down to us in human form!" — Acts 14:11' },
+      ],
+    });
+
+    this.spawnNPC({
+      id: 'zeus_priest', name: 'Priest of Zeus',
+      x: 0, z: -6,
+      bodyColor: 0xd0a050, accentColor: 0xf0c870, headColor: 0xc0a070,
+      dialogues: [
+        { speaker: 'Priest of Zeus', text: '"The gods have come down to us in the likeness of men! Prepare the oxen! Bring the garlands!" — Acts 14:11-13' },
+      ],
+      onComplete: 'zeus_scene',
+    });
+
+    this.spawnNPC({
+      id: 'antioch_agitator', name: 'Agitator from Antioch',
+      x: -3, z: -10,
+      bodyColor: 0x2a2a3a, accentColor: 0x4a4a6a, headColor: 0x8a7050,
+      dialogues: [
+        { speaker: 'Agitator', text: '"People of Lystra! This man is a deceiver. He was thrown out of Antioch and Iconium for sowing confusion. Do not believe him!" — Acts 14:19' },
+      ],
+    });
+
+    this.player.pos.set(0, 0, 14);
+    this.playerGroup.position.set(0, 0, 14);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 26);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Lystra';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 14:8-20';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak to the lame man';
+
+    this.showQuestPopup(
+      'Lystra — Three Dramatic Moments',
+      'A lame man. A crowd that thinks you are gods. And a stoning.',
+      'Acts 14:8-20'
+    );
+  },
+
+  buildLystraWorld() {
+    const bldgs = [
+      {x:-10,z:-5,w:7,h:4,d:6},{x:10,z:-5,w:7,h:4,d:6},
+      {x:-10,z:8,w:6,h:3,d:5},{x:10,z:8,w:6,h:3,d:5},
+    ];
+    for (const b of bldgs) {
+      this.addBox(b.x, b.h/2, b.z, b.w, b.h, b.d, 0xc0a870);
+      this.addBox(b.x, b.h+0.12, b.z, b.w+0.2, 0.24, b.d+0.2, 0x9a7848);
+    }
+    // Zeus temple
+    this.addBox(0, 2.5, -12, 12, 5, 9, 0xe0d8c0);
+    this.addBox(0, 5.12, -12, 12.2, 0.24, 9.2, 0xc0b890);
+    // Temple columns
+    for (const cx of [-5, -2.5, 0, 2.5, 5]) {
+      this.addBox(cx, 2.0, -7.5, 0.6, 4, 0.6, 0xe8e0d0);
+    }
+    // City road
+    this.addBox(0, 0.04, 3, 6, 0.08, 20, 0xb0a060);
+    // Palm trees
+    for (const [px, pz] of [[-7,2],[7,2],[-7,18],[7,18]]) this.addPalm(px, pz);
+    // Oxen representation (2 brown boxes with legs)
+    for (const ox of [-2, 2]) {
+      this.addBox(ox, 0.5, -4.5, 1.2, 1, 2, 0x7a4a18);
+    }
+  },
+
+  showZeusScene() {
+    this.lystraPhase = 1;
+    this.dialogueActive = true;
+
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;';
+    document.body.appendChild(ov);
+
+    const mk = (html, css) => {
+      const d = document.createElement('div');
+      d.innerHTML = html;
+      d.style.cssText = css + 'opacity:0;transition:opacity 1.1s ease;';
+      ov.appendChild(d);
+      return d;
+    };
+
+    const t1 = mk('"When the crowds saw what Paul had done, they lifted up their voices, saying in Lycaonian, \'The gods have come down to us in the likeness of men!\'"',
+      'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f0d090;font-size:clamp(0.95rem,2.5vw,1.1rem);max-width:540px;line-height:1.9;margin-bottom:10px;');
+    const t2 = mk('<em>Barnabas they called Zeus, and Paul, Hermes.</em> — Acts 14:11-12',
+      'font-family:Crimson Text,Georgia,serif;color:#e0c080;font-size:clamp(0.9rem,2.3vw,1.05rem);margin-bottom:20px;');
+    const t3 = mk('"Paul and Barnabas tore their garments and rushed out..."',
+      'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8b880;font-size:clamp(0.85rem,2.2vw,1rem);max-width:500px;line-height:1.8;margin-bottom:16px;');
+    const t4 = mk('"We also are men, of like nature with you, and we bring you good news, that you should turn from these vain things to a living God, who made the heaven and the earth and the sea and all that is in them." — Acts 14:15',
+      'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#a8c8e0;font-size:clamp(0.85rem,2.2vw,1rem);max-width:540px;line-height:1.9;margin-bottom:20px;');
+
+    setTimeout(() => { t1.style.opacity = '1'; }, 400);
+    setTimeout(() => { t2.style.opacity = '1'; }, 1600);
+    setTimeout(() => { t3.style.opacity = '1'; }, 2800);
+    setTimeout(() => { t4.style.opacity = '1'; }, 4000);
+
+    setTimeout(() => {
+      ov.style.transition = 'opacity 1.5s';
+      ov.style.opacity = '0';
+      setTimeout(() => {
+        if (ov.parentNode) ov.remove();
+        this.dialogueActive = false;
+        this.showStoningScene();
+      }, 1600);
+    }, 6000);
+  },
+
+  showStoningScene() {
+    this.lystraPhase = 2;
+    this.showNotification('Jews from Antioch and Iconium\narrived and turned the crowd.\nRun!');
+
+    setTimeout(() => {
+      // Simple stoning cutscene — no need for a full runner
+      this.dialogueActive = true;
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;';
+      document.body.appendChild(ov);
+
+      const mk = (html, css) => {
+        const d = document.createElement('div');
+        d.innerHTML = html;
+        d.style.cssText = css + 'opacity:0;transition:opacity 1.1s ease;';
+        ov.appendChild(d);
+        return d;
+      };
+
+      const t1 = mk('"But Jews came from Antioch and Iconium, and having persuaded the crowds, they stoned Paul and dragged him out of the city, supposing that he was dead."',
+        'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f0d090;font-size:clamp(0.9rem,2.3vw,1.1rem);max-width:540px;line-height:1.9;margin-bottom:16px;');
+      const t2 = mk('— Acts 14:19',
+        'color:#9a8050;font-size:0.85rem;margin-bottom:24px;');
+      const t3 = mk('"But when the disciples gathered about him, he rose up and entered the city..."',
+        'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8e0c8;font-size:clamp(0.9rem,2.3vw,1.05rem);max-width:500px;line-height:1.8;margin-bottom:10px;');
+      const t4 = mk('— Acts 14:20',
+        'color:#80a080;font-size:0.85rem;margin-bottom:24px;');
+      const t5 = mk('"Through many tribulations we must enter the kingdom of God."',
+        'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#d0c090;font-size:clamp(0.9rem,2.4vw,1.1rem);max-width:500px;line-height:1.9;margin-bottom:8px;');
+      const t6 = mk('— Acts 14:22',
+        'color:#9a8050;font-size:0.85rem;');
+
+      setTimeout(() => { t1.style.opacity = '1'; }, 400);
+      setTimeout(() => { t2.style.opacity = '1'; }, 1600);
+      // Black flash for stoning
+      const blackout = document.createElement('div');
+      blackout.style.cssText = 'position:fixed;inset:0;z-index:210;background:black;opacity:0;pointer-events:none;transition:opacity 0.4s;';
+      document.body.appendChild(blackout);
+      setTimeout(() => {
+        blackout.style.opacity = '1';
+        setTimeout(() => { blackout.style.opacity = '0'; setTimeout(() => blackout.remove(), 600); }, 800);
+      }, 2000);
+      setTimeout(() => { t3.style.opacity = '1'; }, 3200);
+      setTimeout(() => { t4.style.opacity = '1'; }, 4200);
+      setTimeout(() => { t5.style.opacity = '1'; }, 5200);
+      setTimeout(() => { t6.style.opacity = '1'; }, 6000);
+
+      setTimeout(() => {
+        ov.style.transition = 'opacity 1.5s';
+        ov.style.opacity = '0';
+        setTimeout(() => {
+          if (ov.parentNode) ov.remove();
+          this.dialogueActive = false;
+          this.showQuestPopup(
+            'Lystra — Paul rises',
+            'From Lystra, Paul traveled to Derbe. He got up and entered the city.',
+            'Acts 14:20'
+          );
+          const dismissBtn = document.getElementById('qp-dismiss');
+          if (dismissBtn) {
+            const orig = dismissBtn.onclick;
+            dismissBtn.onclick = () => {
+              if (orig) orig();
+              this.loadDerbe();
+            };
+          }
+        }, 1600);
+      }, 7500);
+    }, 2500);
+  },
+
+  // ═══════════════════════════════════════
+  //  10. DERBE
+  // ═══════════════════════════════════════
+  loadDerbe() {
+    this.currentScene = 'derbe';
+    this.journeyPhase = 10;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0xb0a080);
+    this.scene.fog = new THREE.FogExp2(0xc0b890, 0.022);
+
+    this.addSceneLights(0xd0c090, 0xffcc70, 40, 30, 20);
+    this.addGround(0xc0a870);
+
+    // Eastern Anatolian buildings — drier, dusty
+    const derbeBldgs = [
+      {x:-9,z:-4,w:6,h:3.5,d:5},{x:9,z:-4,w:6,h:3.5,d:5},
+      {x:-9,z:8,w:5,h:3,d:5},{x:9,z:8,w:5,h:3,d:5},
+      {x:0,z:-8,w:7,h:4,d:5},
+    ];
+    for (const b of derbeBldgs) {
+      this.addBox(b.x, b.h/2, b.z, b.w, b.h, b.d, 0xc8a870);
+    }
+
+    // Gaius NPC
+    this.spawnNPC({
+      id: 'gaius_derbe', name: 'Gaius',
+      x: 3, z: 5,
+      bodyColor: 0x5a6a4a, accentColor: 0x8a9a70, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Gaius', text: '"I heard your message today. I believe. Whatever you do next, I want to follow you." — Acts 20:4 (Gaius of Derbe)' },
+        { speaker: 'Gaius', text: '"You have come far. Tarsus is not distant from here — you could be home before the month is out. Or... you could go back."' },
+      ],
+      onComplete: 'gaius_recruited',
+    });
+
+    this.spawnNPC({
+      id: 'derbe_elder', name: 'New Believer',
+      x: -4, z: 4,
+      bodyColor: 0x7a6a50, accentColor: 0xaa9070, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'New Believer', text: '"Many disciples were made in Derbe today. Paul\'s work here has been good." — Acts 14:20-21' },
+      ],
+    });
+
+    this.player.pos.set(0, 0, 12);
+    this.playerGroup.position.set(0, 0, 12);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 24);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Derbe';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 14:20-21';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak to Gaius';
+
+    this.showQuestPopup(
+      'Derbe — The Turning Point',
+      'Many disciples were made in Derbe. Paul could have gone home to Tarsus — but he chose to go back through every dangerous city.',
+      'Acts 14:20-21'
+    );
+  },
+
+  // ═══════════════════════════════════════
+  //  11. RETURN JOURNEY
+  // ═══════════════════════════════════════
+  loadReturnJourney() {
+    this.currentScene = 'return';
+    this.journeyPhase = 11;
+
+    // Show a map montage overlay
+    this.dialogueActive = true;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.94);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;overflow-y:auto;';
+    document.body.appendChild(ov);
+
+    const title = document.createElement('div');
+    title.textContent = 'The Return Journey';
+    title.style.cssText = 'color:#c9a84c;font-size:clamp(1.6rem,4vw,2.2rem);font-weight:700;letter-spacing:0.12em;margin-bottom:6px;opacity:0;transition:opacity 1s ease;';
+    ov.appendChild(title);
+
+    const sub = document.createElement('div');
+    sub.textContent = 'Strengthening the disciples through every city — Acts 14:21-26';
+    sub.style.cssText = 'color:#7a6030;font-size:clamp(0.75rem,1.8vw,0.9rem);letter-spacing:0.15em;margin-bottom:32px;opacity:0;transition:opacity 1s ease 0.4s;';
+    ov.appendChild(sub);
+
+    const stops = [
+      { city: 'Lystra', verse: '"They appointed elders and committed them to the Lord with prayer and fasting." — Acts 14:23' },
+      { city: 'Iconium', verse: '"Strengthening the souls of the disciples, encouraging them to continue in the faith." — Acts 14:22' },
+      { city: 'Pisidian Antioch', verse: '"Through many tribulations we must enter the kingdom of God." — Acts 14:22' },
+      { city: 'Perga', verse: '"They preached in Perga as well." — Acts 14:25' },
+      { city: 'Attalia', verse: '"They sailed back to Antioch." — Acts 14:26' },
+    ];
+
+    const stopsContainer = document.createElement('div');
+    stopsContainer.style.cssText = 'display:flex;flex-direction:column;gap:14px;max-width:540px;width:100%;';
+    ov.appendChild(stopsContainer);
+
+    stops.forEach((stop, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'opacity:0;transition:opacity 0.8s ease;text-align:left;border-left:3px solid #c9a84c;padding:10px 16px;background:rgba(201,168,76,0.06);border-radius:0 6px 6px 0;';
+      row.innerHTML = '<div style="color:#c9a84c;font-size:0.9rem;letter-spacing:0.1em;margin-bottom:4px;">' + stop.city + '</div>'
+        + '<div style="font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8b880;font-size:0.9rem;line-height:1.7;">' + stop.verse + '</div>';
+      stopsContainer.appendChild(row);
+      setTimeout(() => { row.style.opacity = '1'; }, 800 + i * 700);
+    });
+
+    const finalVerse = document.createElement('div');
+    finalVerse.style.cssText = 'margin-top:28px;font-family:Crimson Text,Georgia,serif;font-style:italic;color:#a8c8e0;font-size:clamp(0.9rem,2.3vw,1.05rem);max-width:500px;line-height:1.9;opacity:0;transition:opacity 1.2s ease;';
+    finalVerse.innerHTML = '"They gathered the church together and declared all that God had done with them, and how he had opened a door of faith to the Gentiles." — Acts 14:27';
+    ov.appendChild(finalVerse);
+
+    const continueBtn = document.createElement('button');
+    continueBtn.textContent = 'Return to Antioch';
+    continueBtn.style.cssText = 'margin-top:28px;padding:12px 32px;background:rgba(201,168,76,0.15);border:2px solid #c9a84c;color:#c9a84c;font-family:Cinzel,serif;font-size:1rem;letter-spacing:0.1em;cursor:pointer;border-radius:8px;opacity:0;transition:opacity 1s ease;';
+    ov.appendChild(continueBtn);
+
+    setTimeout(() => { title.style.opacity = '1'; }, 200);
+    setTimeout(() => { sub.style.opacity = '1'; }, 600);
+    setTimeout(() => { finalVerse.style.opacity = '1'; }, 800 + stops.length * 700 + 400);
+    setTimeout(() => { continueBtn.style.opacity = '1'; }, 800 + stops.length * 700 + 1400);
+
+    continueBtn.addEventListener('click', () => {
+      ov.style.transition = 'opacity 1s';
+      ov.style.opacity = '0';
+      setTimeout(() => {
+        if (ov.parentNode) ov.remove();
+        this.dialogueActive = false;
+        this.showJourney1Complete();
+      }, 1000);
+    });
+    continueBtn.addEventListener('touchstart', (e) => { e.preventDefault(); continueBtn.click(); }, { passive: false });
+  },
+
+  // ═══════════════════════════════════════
+  //  JOURNEY 1 COMPLETE SCREEN
+  // ═══════════════════════════════════════
+  showJourney1Complete() {
+    this.j1Complete = true;
+    this.inventory.shekels += 500;
+    this.updateInventoryHUD();
+
+    this.dialogueActive = true;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;overflow-y:auto;';
+    document.body.appendChild(ov);
+
+    const t1 = document.createElement('div');
+    t1.textContent = 'First Missionary Journey';
+    t1.style.cssText = 'color:#c9a84c;font-size:clamp(1.8rem,5vw,2.8rem);font-weight:700;letter-spacing:0.15em;text-shadow:0 0 30px rgba(201,168,76,0.5);margin-bottom:4px;opacity:0;transition:opacity 1s;';
+    ov.appendChild(t1);
+
+    const t2 = document.createElement('div');
+    t2.textContent = 'COMPLETE — Acts 13-14';
+    t2.style.cssText = 'color:#9a8050;font-size:clamp(0.8rem,2vw,1rem);letter-spacing:0.25em;margin-bottom:30px;opacity:0;transition:opacity 1s 0.4s;';
+    ov.appendChild(t2);
+
+    const cities = ['Antioch of Syria','Cyprus (Salamis & Paphos)','Perga','Pisidian Antioch','Iconium','Lystra','Derbe'];
+    const citiesBox = document.createElement('div');
+    citiesBox.style.cssText = 'background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:20px 28px;max-width:460px;margin-bottom:20px;text-align:left;opacity:0;transition:opacity 1s 0.8s;';
+    citiesBox.innerHTML = '<div style="color:#c9a84c;font-size:0.82rem;letter-spacing:0.2em;margin-bottom:10px;">CITIES VISITED</div>'
+      + cities.map(c => '<div style="font-family:Crimson Text,Georgia,serif;color:#c8b880;font-size:0.95rem;padding:3px 0;">&#10022; ' + c + '</div>').join('');
+    ov.appendChild(citiesBox);
+
+    const rewards = document.createElement('div');
+    rewards.style.cssText = 'background:rgba(120,200,120,0.06);border:1px solid rgba(120,200,120,0.3);border-radius:10px;padding:16px 24px;max-width:460px;margin-bottom:24px;opacity:0;transition:opacity 1s 1.2s;font-family:Crimson Text,Georgia,serif;color:#a0e0a0;font-size:0.95rem;';
+    rewards.innerHTML = '<strong>Rewards:</strong> +500 shekels &nbsp;&nbsp; +Gaius as companion';
+    ov.appendChild(rewards);
+
+    const comingSoon = document.createElement('div');
+    comingSoon.style.cssText = 'color:#7a6030;font-size:clamp(0.8rem,2vw,0.95rem);letter-spacing:0.18em;opacity:0;transition:opacity 1s 1.6s;margin-bottom:20px;';
+    comingSoon.textContent = 'Journey 2: The Jerusalem Council — Coming Soon';
+    ov.appendChild(comingSoon);
+
+    const restartBtn = document.createElement('button');
+    restartBtn.textContent = 'Return to Jerusalem';
+    restartBtn.style.cssText = 'padding:12px 28px;background:rgba(201,168,76,0.15);border:2px solid #c9a84c;color:#c9a84c;font-family:Cinzel,serif;font-size:0.95rem;letter-spacing:0.1em;cursor:pointer;border-radius:8px;opacity:0;transition:opacity 1s 2s;';
+    ov.appendChild(restartBtn);
+
+    setTimeout(() => { t1.style.opacity = '1'; }, 300);
+    setTimeout(() => { t2.style.opacity = '1'; }, 700);
+    setTimeout(() => { citiesBox.style.opacity = '1'; }, 1200);
+    setTimeout(() => { rewards.style.opacity = '1'; }, 1700);
+    setTimeout(() => { comingSoon.style.opacity = '1'; }, 2100);
+    setTimeout(() => { restartBtn.style.opacity = '1'; }, 2500);
+
+    restartBtn.addEventListener('click', () => {
+      ov.style.transition = 'opacity 1s';
+      ov.style.opacity = '0';
+      setTimeout(() => {
+        if (ov.parentNode) ov.remove();
+        this.dialogueActive = false;
+        this.loadJerusalemCouncil();
+      }, 1000);
+    });
+    restartBtn.addEventListener('touchstart', (e) => { e.preventDefault(); restartBtn.click(); }, { passive: false });
+  },
+
+  // ═══════════════════════════════════════
+  //  JERUSALEM COUNCIL STUB
+  // ═══════════════════════════════════════
+  loadJerusalemCouncil() {
+    this.dialogueActive = true;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:#080500;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;';
+    document.body.appendChild(ov);
+
+    const t1 = document.createElement('div');
+    t1.textContent = "Paul\u2019s Journeys";
+    t1.style.cssText = 'color:#c9a84c;font-size:clamp(2rem,6vw,3rem);font-weight:700;letter-spacing:0.15em;margin-bottom:10px;';
+    ov.appendChild(t1);
+
+    const t2 = document.createElement('div');
+    t2.textContent = 'Second Journey — The Jerusalem Council';
+    t2.style.cssText = 'color:#9a8050;font-size:clamp(0.85rem,2.2vw,1.1rem);letter-spacing:0.18em;margin-bottom:30px;';
+    ov.appendChild(t2);
+
+    const soon = document.createElement('div');
+    soon.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8b880;font-size:clamp(1rem,2.5vw,1.2rem);max-width:440px;line-height:1.9;margin-bottom:30px;';
+    soon.innerHTML = '"It seemed good to the Holy Spirit and to us to lay on you no greater burden than these requirements..." — Acts 15:28<br><br><em>Coming Soon</em>';
+    ov.appendChild(soon);
+
+    const backBtn = document.createElement('button');
+    backBtn.textContent = 'Play Again from Jerusalem';
+    backBtn.style.cssText = 'padding:12px 28px;background:rgba(201,168,76,0.15);border:2px solid #c9a84c;color:#c9a84c;font-family:Cinzel,serif;font-size:0.9rem;letter-spacing:0.1em;cursor:pointer;border-radius:8px;margin-top:8px;';
+    ov.appendChild(backBtn);
+
+    backBtn.addEventListener('click', () => {
+      location.reload();
+    });
+    backBtn.addEventListener('touchstart', (e) => { e.preventDefault(); location.reload(); }, { passive: false });
+  },
+
+  // ═══════════════════════════════════════
+  //  ENDIALOG CALLBACKS FOR JOURNEY 1
+  // ═══════════════════════════════════════
+  _handleJ1DialogueComplete(cb, nid) {
+    if (cb === 'antioch_leader') {
+      if (!this.antiochNPCsMet[nid]) {
+        this.antiochNPCsMet[nid] = true;
+        const leaderIds = ['barnabas_antioch','simeon_niger','lucius_cyrene','manaen','john_mark'];
+        if (leaderIds.includes(nid)) {
+          this.antiochLeadersMet++;
+          this.showNotification('Church leader met: ' + this.antiochLeadersMet + '/5');
+          if (this.antiochLeadersMet >= 5) {
+            this.antiochAllMet = true;
+            if (this.elQuestText) this.elQuestText.textContent = 'Enter the church to receive commissioning';
+            this.showNotification('All leaders met!\nEnter the church building.');
+          }
+        }
+      }
+
+    } else if (cb === 'salamis_done') {
+      this.salamisSynagogueVisited = true;
+      this.showNotification('The message was heard in Salamis.\nNow travel west to Paphos...');
+      setTimeout(() => { this.loadPaphos(); }, 3000);
+
+    } else if (cb === 'meet_proconsul') {
+      if (this.elymosBlinded) return;
+      // After meeting proconsul, offer Elymas choice
+      this.showChoice(
+        'Bar-Jesus opposes the gospel. What do you do?',
+        'Confront him boldly',
+        'Speak only to the proconsul',
+        () => { this.showElymasJudgment(); },
+        () => {
+          this.showNotification('You continue speaking to the proconsul.\nElymas keeps interrupting...');
+          setTimeout(() => { this.showElymasJudgment(); }, 2000);
+        }
+      );
+
+    } else if (cb === 'challenge_elymas') {
+      this.showElymasJudgment();
+
+    } else if (cb === 'john_mark_departs') {
+      this.showChoice(
+        'John Mark is going home to Jerusalem.',
+        '"We release you, John Mark. God go with you."',
+        '"This is desertion, Mark. I will remember this."',
+        () => {
+          this.showNotification('John Mark returns to Jerusalem.\nPaul presses on into the mountains.');
+          // Remove John Mark from scene
+          if (this.npcObjects['john_mark_perga']) {
+            this.scene.remove(this.npcObjects['john_mark_perga'].group);
+            delete this.npcObjects['john_mark_perga'];
+          }
+          setTimeout(() => {
+            this.showQuestPopup(
+              'The Road Ahead — Taurus Mountains',
+              'Bandits, altitude, and hard terrain. But Paul presses on.',
+              '2 Corinthians 11:26'
+            );
+            const dismissBtn = document.getElementById('qp-dismiss');
+            if (dismissBtn) {
+              dismissBtn.onclick = () => {
+                document.getElementById('quest-popup').classList.add('hidden');
+                this.dialogueActive = false;
+                this.loadMountainPass();
+              };
+            }
+          }, 1000);
+        },
+        () => {
+          this.showNotification('John Mark returns to Jerusalem.\n(This disagreement will matter later.)');
+          if (this.npcObjects['john_mark_perga']) {
+            this.scene.remove(this.npcObjects['john_mark_perga'].group);
+            delete this.npcObjects['john_mark_perga'];
+          }
+          setTimeout(() => {
+            this.showQuestPopup(
+              'The Road Ahead — Taurus Mountains',
+              'Bandits, altitude, and hard terrain. But Paul presses on.',
+              '2 Corinthians 11:26'
+            );
+            const dismissBtn = document.getElementById('qp-dismiss');
+            if (dismissBtn) {
+              dismissBtn.onclick = () => {
+                document.getElementById('quest-popup').classList.add('hidden');
+                this.dialogueActive = false;
+                this.loadMountainPass();
+              };
+            }
+          }, 1000);
+        }
+      );
+
+    } else if (cb === 'start_sermon') {
+      this.startSermonGame();
+
+    } else if (cb === 'pisidian_expelled') {
+      this.showNotification('Paul and Barnabas shook the dust\nfrom their feet and went to Iconium.\n— Acts 13:51');
+      setTimeout(() => {
+        this.showQuestPopup(
+          'A Church Left Behind',
+          'The disciples were filled with joy and with the Holy Spirit.',
+          'Acts 13:52'
+        );
+        const dismissBtn = document.getElementById('qp-dismiss');
+        if (dismissBtn) {
+          dismissBtn.onclick = () => {
+            document.getElementById('quest-popup').classList.add('hidden');
+            this.dialogueActive = false;
+            this.loadIconium();
+          };
+        }
+      }, 1500);
+
+    } else if (cb === 'heal_lame_man') {
+      // Show healing — lame man rises
+      this.showChoice(
+        '"Paul looked intently at him and saw that he had faith to be made well." — Acts 14:9',
+        '"Stand upright on your feet!"',
+        'Wait and observe',
+        () => {
+          // Animate the NPC rising
+          const npcObj = this.npcObjects['lame_man'];
+          if (npcObj) {
+            let t = 0;
+            const anim = setInterval(() => {
+              t += 0.05;
+              npcObj.group.position.y = Math.min(t, 1) * 0.0;
+              if (t >= 1) { clearInterval(anim); }
+            }, 30);
+          }
+          this.showNotification('"And he sprang up and began walking."\n— Acts 14:10');
+          setTimeout(() => {
+            this.showQuestPopup(
+              'A Man Walks',
+              '"The man who had never walked... sprang up and began walking." Now speak to the priest of Zeus.',
+              'Acts 14:10'
+            );
+            const dismissBtn = document.getElementById('qp-dismiss');
+            if (dismissBtn) {
+              dismissBtn.onclick = () => {
+                document.getElementById('quest-popup').classList.add('hidden');
+                this.dialogueActive = false;
+              };
+            }
+          }, 1500);
+        },
+        () => {
+          this.showNotification('Paul looked intently at the man...\nApproach him again when ready.');
+        }
+      );
+
+    } else if (cb === 'zeus_scene') {
+      this.showZeusScene();
+
+    } else if (cb === 'gaius_recruited') {
+      this.showNotification('Gaius of Derbe joined the company!\n(Acts 20:4)');
+      this.showChoice(
+        '"Many disciples were made in Derbe. The way home to Tarsus is near — or return through the dangerous cities to strengthen the churches."',
+        'Return through Lystra, Iconium, Antioch',
+        'Take the road home to Tarsus',
+        () => {
+          this.showQuestPopup(
+            'Paul Retraces His Steps',
+            'Through every city that tried to kill him, Paul returned to strengthen what was built.',
+            'Acts 14:21-22'
+          );
+          const dismissBtn = document.getElementById('qp-dismiss');
+          if (dismissBtn) {
+            dismissBtn.onclick = () => {
+              document.getElementById('quest-popup').classList.add('hidden');
+              this.dialogueActive = false;
+              this.loadReturnJourney();
+            };
+          }
+        },
+        () => {
+          this.showNotification('"But Paul turned back..."\nThe right path leads through the danger.');
+          setTimeout(() => {
+            this.showChoice(
+              'The disciples need you. Will you return?',
+              'Yes — return through the cities',
+              'Go home to Tarsus',
+              () => { this.loadReturnJourney(); },
+              () => {
+                this.showNotification('Paul turned back. The churches needed him.');
+                setTimeout(() => { this.loadReturnJourney(); }, 2000);
+              }
+            );
+          }, 2000);
+        }
+      );
+    }
+  },
+
 };
 
 // ── STARTUP ───────────────────────────────────────────────
