@@ -137,6 +137,29 @@ const Game = {
   questReadyPopupShown:     false,
   ambientCtx:               null,
 
+  // ── JOURNEY 2 STATE ───────────────────────────────────────
+  j2Phase:             0,
+  councilComplete:     false,
+  silasJoined:         false,
+  timothyJoined:       false,
+  macedonianCall:      false,
+  philippiPhase:       0,
+  lydiaConverted:      false,
+  slaveGirlFreed:      false,
+  prisonEscape:        false,
+  jailerConverted:     false,
+  athensPhase:         0,
+  areopagusArgIdx:     0,
+  areopagusSpeechDone: false,
+  corinthPhase:        0,
+  aquilaMetPrisca:     false,
+  crispusConverted:    false,
+  gallioTrial:         false,
+  j2Complete:          false,
+  j2CouncilNPCsMet:    {},
+  j2CouncilMetCount:   0,
+  j2CorinthEarnings:   0,
+
   // ── RUNNER STATE ──────────────────────────────────────────
   runnerActive:      false,
   runnerLane:        1,         // 0=left 1=center 2=right
@@ -1662,6 +1685,13 @@ const Game = {
           this.showDepartureScene();
         }
 
+      } else if ([
+        'council_npc_met','council_silas_met','timothy_joins',
+        'lydia_believes','jailer_saved','thessalonica_done','berea_done',
+        'altar_seen','aquila_met','priscilla_met','crispus_believes','gallio_dismisses',
+      ].includes(cb)) {
+        // Journey 2 callbacks
+        this._handleJ2DialogueComplete(cb, nid);
       } else {
         // Journey 1 callbacks
         this._handleJ1DialogueComplete(cb, nid);
@@ -6181,35 +6211,1163 @@ const Game = {
   //  JERUSALEM COUNCIL STUB
   // ═══════════════════════════════════════
   loadJerusalemCouncil() {
+    this.currentScene = 'jerusalem_council';
+    this.j2Phase = 12;
+    this.teardownScene();
+    this.runnerActive  = false;
+    this.voyageActive  = false;
+    this.mtnPassActive = false;
+    this.j2CouncilNPCsMet  = {};
+    this.j2CouncilMetCount = 0;
+
+    this.scene.background = new THREE.Color(0x1a1208);
+    this.scene.fog = new THREE.FogExp2(0x1a1208, 0.018);
+    this.addSceneLights(0xffd890, 0xffaa40, 0, 8, 10);
+    this.addGround(0x5a4a30);
+
+    // Council chamber walls & benches
+    this.addBox( 0,  2, -14, 28, 4, 1, 0x4a3a20);  // north wall
+    this.addBox( 0,  2,  10, 28, 4, 1, 0x4a3a20);  // south wall
+    this.addBox( 14, 2,  -2,  1, 4,24, 0x4a3a20);  // east wall
+    this.addBox(-14, 2,  -2,  1, 4,24, 0x4a3a20);  // west wall
+    this.addBox(  0, 0.2, -2, 24, 0.4, 20, 0x3a2e18); // stone floor
+    // Torches
+    const torchPositions = [[-10,3,-13],[10,3,-13],[-10,3,9],[10,3,9]];
+    for (const [tx,ty,tz] of torchPositions) {
+      this.addBox(tx, ty, tz, 0.3, 0.8, 0.3, 0x8a5520);
+      const fl = new THREE.PointLight(0xff8822, 1.2, 12);
+      fl.position.set(tx, ty + 0.8, tz);
+      this.scene.add(fl);
+    }
+    // Wooden benches in circle
+    const benchAngles = [0, 60, 120, 180, 240, 300];
+    for (const ang of benchAngles) {
+      const rad = (ang * Math.PI) / 180;
+      const bx = Math.sin(rad) * 7;
+      const bz = Math.cos(rad) * 7 - 2;
+      this.addBox(bx, 0.4, bz, 3.5, 0.4, 1.0, 0x6a4820);
+    }
+    // Central speaker spot
+    this.addBox(0, 0.05, -2, 2, 0.1, 2, 0x7a6840);
+
+    const councilNPCs = [
+      { id: 'council_peter', name: 'Peter',
+        x: -4, z: -8,
+        bodyColor: 0x3a5a7a, accentColor: 0x6a90b0, headColor: 0xc09060,
+        dialogues: [
+          { speaker: 'Peter', text: '"Brothers, you know that in the early days God made a choice among you, that by my mouth the Gentiles should hear the word of the gospel and believe." — Acts 15:7' },
+          { speaker: 'Peter', text: '"God gave them the Holy Spirit just as he did to us. Why do we test God by putting on the neck of the disciples a yoke that neither we nor our fathers have been able to bear?" — Acts 15:10' },
+          { speaker: 'Peter', text: '"We believe that we will be saved through the grace of the Lord Jesus, just as they will." — Acts 15:11' },
+        ],
+        onComplete: 'council_npc_met',
+      },
+      { id: 'council_james', name: 'James',
+        x: 4, z: -8,
+        bodyColor: 0x5a3a1a, accentColor: 0x9a6a30, headColor: 0xa07040,
+        dialogues: [
+          { speaker: 'James', text: '"Simon has related how God first visited the Gentiles to take from them a people for his name. And with this the words of the prophets agree." — Acts 15:14-15' },
+          { speaker: 'James', text: '"My judgment is that we should not trouble those of the Gentiles who turn to God, but should write to them to abstain from the things polluted by idols, and from sexual immorality, and from what has been strangled, and from blood." — Acts 15:19-20' },
+          { speaker: 'James', text: '"It seemed good to the Holy Spirit and to us to lay on you no greater burden than these requirements." — Acts 15:28' },
+        ],
+        onComplete: 'council_npc_met',
+      },
+      { id: 'council_pharisee', name: 'Pharisee Believer',
+        x: -5, z: 2,
+        bodyColor: 0x6a5a2a, accentColor: 0xaa9040, headColor: 0xb08850,
+        dialogues: [
+          { speaker: 'Pharisee Believer', text: '"Unless you are circumcised according to the custom of Moses, you cannot be saved! The Gentiles must fully become Jews!" — Acts 15:1' },
+          { speaker: 'Pharisee Believer', text: '"The Law of Moses has been the foundation for a thousand years. You would cast it aside?"' },
+        ],
+        onComplete: 'council_npc_met',
+      },
+      { id: 'council_silas', name: 'Silas',
+        x: 5, z: 2,
+        bodyColor: 0x4a6a3a, accentColor: 0x7aaa60, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'Silas', text: '"I am Silas — a prophet and a Roman citizen. The council has spoken. I will carry this letter to the Gentile churches."' },
+          { speaker: 'Silas', text: '"Paul — they say you are returning to visit the churches. I would travel with you." — Acts 15:40' },
+        ],
+        onComplete: 'council_silas_met',
+      },
+    ];
+
+    for (const npc of councilNPCs) this.spawnNPC(npc);
+
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Jerusalem Council';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 15:1-35';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak with the council members';
+
+    this.showQuestPopup(
+      'The Jerusalem Council — Acts 15',
+      'A dispute has arisen: must Gentile believers be circumcised? The apostles and elders have gathered to decide.',
+      'Acts 15:6'
+    );
+  },
+
+  // ── JOURNEY 2: TIMOTHY RECRUIT ───────────────────────────
+  loadTimothyRecruit() {
+    this.currentScene = 'timothy';
+    this.j2Phase = 13;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0xd4a060);
+    this.scene.fog = new THREE.FogExp2(0xd4b880, 0.022);
+    this.addSceneLights(0xffd890, 0xffcc80, 40, 30, 20);
+    this.addGround(0xc4a060);
+
+    // Lystra walls — warm Anatolian tan
+    this.addBox( 0, 1.5, -14, 28, 3, 1, 0xc8aa70);
+    this.addBox( 0, 1.5,  12, 28, 3, 1, 0xc8aa70);
+    this.addBox( 14, 1.5, -1, 1, 3, 26, 0xc8aa70);
+    this.addBox(-14, 1.5, -1, 1, 3, 26, 0xc8aa70);
+    const lBuildings = [
+      {x:10,z:-6,w:6,h:4,d:5},{x:-10,z:-6,w:5,h:3.5,d:6},
+      {x:9,z:4,w:5,h:3,d:4},{x:-9,z:4,w:6,h:4,d:5},
+    ];
+    for (const b of lBuildings) {
+      this.addBox(b.x, b.h/2, b.z, b.w, b.h, b.d, 0xc8a870);
+      this.addBox(b.x, b.h+0.12, b.z, b.w+0.2, 0.24, b.d+0.2, 0x9a7848);
+    }
+
+    const timothyNPCs = [
+      { id: 'timothy', name: 'Timothy',
+        x: 0, z: -5,
+        bodyColor: 0x5a7a4a, accentColor: 0x8aaa70, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'Timothy', text: '"Paul! You have returned to Lystra. I am Timothy — you visited here before and my mother Eunice believed. I myself have believed since then. The brothers here speak well of me, they say." — Acts 16:1-2' },
+          { speaker: 'Timothy', text: '"My mother is Jewish and my father is Greek. I want to come with you, Paul. Wherever you go." — 2 Tim 1:5' },
+        ],
+        onComplete: 'timothy_joins',
+      },
+      { id: 'eunice', name: 'Eunice',
+        x: 3, z: -3,
+        bodyColor: 0x9a6a4a, accentColor: 0xc09070, headColor: 0xb08060,
+        dialogues: [
+          { speaker: 'Eunice', text: '"My son Timothy has been raised in the scriptures since childhood. His faith is genuine. Take him with you, Paul — do not leave him here." — 2 Tim 3:15' },
+        ],
+      },
+    ];
+
+    for (const npc of timothyNPCs) this.spawnNPC(npc);
+
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Lystra';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 16:1-5';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak with Timothy';
+
+    this.showQuestPopup(
+      'Lystra — Timothy Is Here',
+      'Paul returns to Lystra and finds Timothy, a young believer well spoken of by the brothers.',
+      'Acts 16:1-2'
+    );
+  },
+
+  // ── JOURNEY 2: TROAS — MACEDONIAN CALL ──────────────────
+  loadTroas() {
+    this.currentScene = 'troas';
+    this.j2Phase = 14;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0x080a14);
+    this.scene.fog = new THREE.FogExp2(0x080a14, 0.012);
+    this.addSceneLights(0x2040a0, 0x4060c0, 0, 12, 5);
+
+    // Night ground
+    this.addGround(0x14180c);
+
+    // Starfield
+    const starGeo = new THREE.BufferGeometry();
+    const starVerts = [];
+    for (let i = 0; i < 300; i++) {
+      starVerts.push((Math.random()-0.5)*200, 30+Math.random()*30, (Math.random()-0.5)*200);
+    }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.3 });
+    this.scene.add(new THREE.Points(starGeo, starMat));
+
+    // Sea strip in distance
+    this.addBox(0, 0.15, -30, 60, 0.3, 15, 0x0a2a4a);
+
+    // Paul's lodging: simple room
+    this.addBox( 0, 1.5,  -2, 10, 3, 8, 0x3a3020);  // walls
+    this.addBox( 0, 3.15, -2, 10.2, 0.3, 8.2, 0x2a2418);  // roof
+    this.addBox( 0, 0.2,  -2, 8, 0.1, 6, 0x4a4030);   // floor
+    this.addBox(-2, 0.35, -2, 3, 0.5, 1.5, 0x5a4a30); // pallet
+
+    // Vision man apparition
+    const visionGeo = new THREE.CylinderGeometry(0.3, 0.4, 1.8, 8);
+    const visionMat = new THREE.MeshStandardMaterial({ color: 0xb0d0ff, emissive: 0x4060a0, emissiveIntensity: 0.8, transparent: true, opacity: 0.7 });
+    const visionFig = new THREE.Mesh(visionGeo, visionMat);
+    visionFig.position.set(4, 0.9, -8);
+    this.scene.add(visionFig);
+    const vLight = new THREE.PointLight(0x8090ff, 1.5, 10);
+    vLight.position.set(4, 2, -8);
+    this.scene.add(vLight);
+
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Troas';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 16:6-10';
+    if (this.elQuestText) this.elQuestText.textContent = 'The Spirit has a new direction';
+
+    this.showNotification('That night in Troas, Paul had a vision.\n— Acts 16:9');
+
+    setTimeout(() => {
+      this.showChoice(
+        '"Come over to Macedonia and help us." — Acts 16:9\n\nPaul woke and told the others. They concluded that God had called them to preach the gospel in Macedonia.',
+        'Set sail for Macedonia',
+        'Wait for another sign',
+        () => {
+          this.macedonianCall = true;
+          this.showNotification('"We immediately sought to go on into Macedonia, concluding that God had called us to preach the gospel to them." — Acts 16:10');
+          setTimeout(() => {
+            this.showQuestPopup(
+              'The Macedonian Call',
+              'Note: The word "we" appears here for the first time — Luke, the author of Acts, has joined the group.',
+              'Acts 16:10'
+            );
+            const db = document.getElementById('qp-dismiss');
+            if (db) db.onclick = () => {
+              document.getElementById('quest-popup').classList.add('hidden');
+              this.dialogueActive = false;
+              setTimeout(() => this.loadPhilippi(), 1500);
+            };
+          }, 2500);
+        },
+        () => {
+          this.macedonianCall = true;
+          this.showNotification('The vision is clear. Paul rises and prepares to sail.\n— Acts 16:10');
+          setTimeout(() => this.loadPhilippi(), 3000);
+        }
+      );
+    }, 2500);
+  },
+
+  // ── JOURNEY 2: PHILIPPI ──────────────────────────────────
+  loadPhilippi() {
+    this.currentScene = 'philippi';
+    this.j2Phase = 15;
+    this.philippiPhase = 0;
+    this.teardownScene();
+    this._buildPhilippiPhase0();
+  },
+
+  _buildPhilippiPhase0() {
+    // Phase 0: Lydia at riverside
+    this.philippiPhase = 0;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0x5a8aaa);
+    this.scene.fog = new THREE.FogExp2(0x7aaac0, 0.018);
+    this.addSceneLights(0xb0d8f0, 0xffe8c0, 30, 25, 20);
+    this.addGround(0x8aaa70);
+
+    // River
+    this.addBox(0, 0.15, -18, 60, 0.3, 12, 0x2a5a8a);
+    // Riverside trees
+    const treeX = [-8,-4,0,4,8,-6,6];
+    for (const tx of treeX) {
+      this.addBox(tx, 1.5, -12, 0.5, 3, 0.5, 0x5a3a18);
+      this.addBox(tx, 4,   -12, 2,   2, 2,   0x2a6020);
+    }
+    // Women seated in a circle (benches)
+    for (let i = 0; i < 5; i++) {
+      const ang = (i / 5) * Math.PI * 2;
+      this.addBox(Math.cos(ang)*4, 0.3, Math.sin(ang)*3 - 5, 1.2, 0.3, 0.8, 0x8a7050);
+    }
+
+    const lydiaData = {
+      id: 'lydia', name: 'Lydia',
+      x: 4, z: -6,
+      bodyColor: 0x6a2a6a, accentColor: 0xaa60aa, headColor: 0xb08060,
+      dialogues: [
+        { speaker: 'Lydia', text: '"I am Lydia, from Thyatira. I trade in purple cloth — the dye comes from a shellfish along the coast. It is costly work, but there is always a market among the wealthy."' },
+        { speaker: 'Lydia', text: '"I have worshiped God for many years, though I am not Jewish. When you spoke today, something opened in me. The Lord himself opened my heart to believe what you said." — Acts 16:14' },
+        { speaker: 'Lydia', text: '"I have been baptized, and my whole household. I insist — you must stay at my house. If you have judged me to be faithful to the Lord, come and stay." — Acts 16:15' },
+      ],
+      onComplete: 'lydia_believes',
+    };
+    this.spawnNPC(lydiaData);
+
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Philippi — Riverside';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 16:11-15';
+    if (this.elQuestText) this.elQuestText.textContent = 'No synagogue — find those who pray';
+
+    this.showQuestPopup(
+      'Philippi — A Roman Colony',
+      'There was no synagogue in Philippi. On the Sabbath, Paul went to the riverside where he supposed there was a place of prayer.',
+      'Acts 16:13'
+    );
+  },
+
+  _buildPhilippiPhase1() {
+    // Phase 1: Slave girl
+    this.philippiPhase = 1;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0xc4a060);
+    this.scene.fog = new THREE.FogExp2(0xd4b880, 0.020);
+    this.addSceneLights(0xffd890, 0xffcc80, 30, 25, 15);
+    this.addGround(0xb0906a);
+
+    // Market street
+    this.addBox( 0, 0.1, 0, 8, 0.2, 40, 0xa09070);
+    this.addBox(-8, 1.5, 0, 2, 3, 30, 0xb8a070);
+    this.addBox( 8, 1.5, 0, 2, 3, 30, 0xb8a070);
+
+    const slaveGirlData = {
+      id: 'slave_girl', name: 'Slave Girl',
+      x: -3, z: -4,
+      bodyColor: 0x8a6040, accentColor: 0xb09070, headColor: 0xb08860,
+      dialogues: [
+        { speaker: 'Slave Girl', text: '"These men are servants of the Most High God, who proclaim to you the way of salvation!" — Acts 16:17' },
+        { speaker: 'Slave Girl', text: '"These men are servants of the Most High God, who proclaim to you the way of salvation!" — Acts 16:17 (She follows you again, crying out...)' },
+      ],
+      onComplete: null,
+    };
+    this.spawnNPC(slaveGirlData);
+
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Philippi — The Street';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 16:16-18';
+    if (this.elQuestText) this.elQuestText.textContent = 'A spirit of divination follows you...';
+
+    this.showNotification('For many days, a slave girl with a spirit of divination followed them...\n— Acts 16:16');
+
+    setTimeout(() => {
+      this.showChoice(
+        'The Slave Girl\n"She has followed you for days, crying this out. Her owners profit greatly from her fortune-telling. What do you do?"',
+        'Turn and command the spirit to leave her',
+        'Avoid her — do not get involved',
+        () => {
+          this.slaveGirlFreed = true;
+          const ov = document.createElement('div');
+          ov.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;padding:40px;';
+          const txt = document.createElement('div');
+          txt.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f5ecd0;font-size:clamp(0.9rem,2.5vw,1.1rem);line-height:1.9;max-width:460px;text-align:center;';
+          txt.innerHTML = '"Paul turned and said to the spirit, \'I command you in the name of Jesus Christ to come out of her.\' And it came out that very hour." — Acts 16:18<br><br><em>When her owners saw that their hope of gain was gone, they seized Paul and Silas and dragged them into the marketplace before the rulers.</em> — Acts 16:19';
+          ov.appendChild(txt);
+          document.body.appendChild(ov);
+          setTimeout(() => { ov.remove(); this._buildPhilippiPhase2(); }, 3500);
+        },
+        () => {
+          this.showNotification('Paul was deeply troubled by the spirit.\nHe could not ignore it any longer.');
+          setTimeout(() => {
+            this.slaveGirlFreed = true;
+            this._buildPhilippiPhase2();
+          }, 2500);
+        }
+      );
+    }, 3000);
+  },
+
+  _buildPhilippiPhase2() {
+    // Phase 2: Prison — dark interior
+    this.philippiPhase = 2;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0x080605);
+    this.scene.fog = new THREE.FogExp2(0x080605, 0.025);
+
+    const torchLight = new THREE.PointLight(0xff6010, 1.8, 14);
+    torchLight.position.set(2, 3, -4);
+    this.scene.add(torchLight);
+    const ambL = new THREE.AmbientLight(0x201408, 0.5);
+    this.scene.add(ambL);
+
+    this.addGround(0x1a1410);
+    // Stone walls
+    this.addBox( 0,  2, -8, 14, 4, 1, 0x3a3028);
+    this.addBox( 0,  2,  4, 14, 4, 1, 0x3a3028);
+    this.addBox( 7,  2, -2,  1, 4,12, 0x3a3028);
+    this.addBox(-7,  2, -2,  1, 4,12, 0x3a3028);
+    this.addBox( 0,  4, -2, 14, 0.4,12, 0x2a2018); // ceiling
+    // Torch on wall
+    this.addBox(2, 2.8, -7.4, 0.3, 0.8, 0.3, 0x7a4418);
+    // Stocks representation
+    this.addBox(-1.5, 0.3, 0, 3, 0.3, 0.4, 0x5a3a18);
+    this.addBox(-1.5, 0.6, 0, 3, 0.3, 0.4, 0x5a3a18);
+
+    this.player.pos.set(0, 0, 2);
+    this.playerGroup.position.set(0, 0, 2);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 14);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Philippi — Prison';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 16:23-25';
+    if (this.elQuestText) this.elQuestText.textContent = 'Beaten with rods — in the inner prison';
+
+    // Prayer overlay
+    const pvOv = document.createElement('div');
+    pvOv.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;pointer-events:none;';
+    const pvTxt = document.createElement('div');
+    pvTxt.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8b880;font-size:clamp(0.9rem,2.5vw,1.1rem);line-height:1.9;max-width:460px;text-align:center;';
+    pvTxt.innerHTML = '"Paul and Silas were beaten with rods and thrown into the inner prison, their feet fastened in stocks. At midnight they were praying and singing hymns to God, and the prisoners were listening to them." — Acts 16:23-25<br><br><em>"The righteous cry out, and the LORD hears them; he delivers them from all their troubles. The LORD is close to the brokenhearted..."</em> — Psalm 34:17-18';
+    pvOv.appendChild(pvTxt);
+    document.body.appendChild(pvOv);
+
+    setTimeout(() => {
+      pvOv.remove();
+      this._buildPhilippiPhase3();
+    }, 5000);
+  },
+
+  _buildPhilippiPhase3() {
+    // Phase 3: Earthquake
+    this.philippiPhase = 3;
+
+    // Screen shake
+    let shakeTimer = 0;
+    const shakeInterval = setInterval(() => {
+      shakeTimer += 0.05;
+      this.camera.position.x = Math.sin(shakeTimer * 40) * 0.4;
+      this.camera.position.z += Math.sin(shakeTimer * 35) * 0.2;
+      if (shakeTimer >= 1.5) {
+        clearInterval(shakeInterval);
+        this.camera.position.x = 0;
+      }
+    }, 16);
+
+    const eqOv = document.createElement('div');
+    eqOv.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:40px;pointer-events:none;';
+    const eqTxt = document.createElement('div');
+    eqTxt.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f5ecd0;font-size:clamp(0.9rem,2.5vw,1.1rem);line-height:1.9;max-width:460px;text-align:center;';
+    eqTxt.innerHTML = '"Suddenly there was a great earthquake, so that the foundations of the prison were shaken. And immediately all the doors were opened, and everyone\'s bonds were unfastened." — Acts 16:26';
+    eqOv.appendChild(eqTxt);
+    document.body.appendChild(eqOv);
+
+    setTimeout(() => {
+      eqOv.remove();
+      this._buildPhilippiPhase4();
+    }, 3500);
+  },
+
+  _buildPhilippiPhase4() {
+    // Phase 4: Jailer
+    this.philippiPhase = 4;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0x0a0c10);
+    this.scene.fog = new THREE.FogExp2(0x101418, 0.020);
+    const nightL = new THREE.HemisphereLight(0x2030a0, 0x102010, 0.4);
+    this.scene.add(nightL);
+    const torchL = new THREE.PointLight(0xff8020, 1.5, 16);
+    torchL.position.set(-3, 3, -8);
+    this.scene.add(torchL);
+
+    this.addGround(0x1a1c14);
+    // Broken prison door
+    this.addBox(0, 0.5, -3, 2, 1, 0.2, 0x5a3a18);
+    // Prison exterior
+    this.addBox(0, 2, -8, 16, 4, 1, 0x3a3028);
+    this.addBox(-8, 2, -2, 1, 4, 12, 0x3a3028);
+    this.addBox( 8, 2, -2, 1, 4, 12, 0x3a3028);
+    // Torch
+    this.addBox(-3, 2.8, -7.4, 0.3, 0.8, 0.3, 0x7a4418);
+
+    const jailerData = {
+      id: 'jailer', name: 'Jailer',
+      x: 0, z: -6,
+      bodyColor: 0x4a5a2a, accentColor: 0x7a8a50, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Jailer', text: '"Sir, what must I do to be saved?" — Acts 16:30' },
+      ],
+      onComplete: 'jailer_saved',
+    };
+    this.spawnNPC(jailerData);
+
+    this.player.pos.set(0, 0, 4);
+    this.playerGroup.position.set(0, 0, 4);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 16);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Philippi — Prison Gate';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 16:30-34';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak with the terrified jailer';
+  },
+
+  // ── JOURNEY 2: THESSALONICA ──────────────────────────────
+  loadThessalonica() {
+    this.currentScene = 'thessalonica';
+    this.j2Phase = 16;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0xc4a860);
+    this.scene.fog = new THREE.FogExp2(0xd4c080, 0.020);
+    this.addSceneLights(0xffd890, 0xffcc70, 40, 30, 20);
+    this.addGround(0xb09850);
+
+    // City walls
+    this.addBox( 0, 2, -14, 30, 4, 1, 0xc8aa70);
+    this.addBox( 0, 2,  10, 30, 4, 1, 0xc8aa70);
+    this.addBox( 15, 2, -2, 1, 4, 24, 0xc8aa70);
+    this.addBox(-15, 2, -2, 1, 4, 24, 0xc8aa70);
+
+    // Synagogue
+    this.addBox(-8, 2.5, -6, 8, 5, 7, 0xd4c080);
+    this.addBox(-8, 5.15, -6, 8.2, 0.3, 7.2, 0xb09848);
+    // Jason's house
+    this.addBox(7, 2, -5, 7, 4, 6, 0xc8a870);
+    this.addBox(7, 4.15, -5, 7.2, 0.3, 6.2, 0x9a7848);
+
+    const jasonData = {
+      id: 'jason', name: 'Jason',
+      x: 0, z: -5,
+      bodyColor: 0x5a4a2a, accentColor: 0x9a8050, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Jason', text: '"Paul — I have hosted you here. Three Sabbaths your message has stirred this city. Many Greeks believe, and leading women too." — Acts 17:4' },
+        { speaker: 'Jason', text: '"But the Jewish leaders have turned the mob against us. They dragged me before the rulers and demanded security. You must leave tonight." — Acts 17:5-9' },
+      ],
+      onComplete: 'thessalonica_done',
+    };
+    this.spawnNPC(jasonData);
+
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Thessalonica';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 17:1-9';
+    if (this.elQuestText) this.elQuestText.textContent = 'Find Jason — the city is in turmoil';
+
+    this.showNotification('"These men who have turned the world upside down have come here also!"\n— Acts 17:6');
+
+    this.showQuestPopup(
+      'Thessalonica',
+      'Paul spent three Sabbaths in Thessalonica. Many believed — especially devout Greeks and prominent women.',
+      'Acts 17:2-4'
+    );
+  },
+
+  // ── JOURNEY 2: BEREA ────────────────────────────────────
+  loadBerea() {
+    this.currentScene = 'berea';
+    this.j2Phase = 17;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0x7a9a60);
+    this.scene.fog = new THREE.FogExp2(0x90a870, 0.018);
+    this.addSceneLights(0xd0e8b0, 0xffe8a0, 30, 30, 20);
+    this.addGround(0x6a8a50);
+
+    // Hillier terrain suggestions
+    this.addBox(-12, 1.5, -8, 4, 3, 8, 0x5a7a40);
+    this.addBox( 12, 2.0, -6, 5, 4, 7, 0x5a7a40);
+    this.addBox(  0, 1.0,-12, 20, 2, 4, 0x6a8a50);
+
+    // Buildings — greener
+    const bBuildings = [
+      {x:8,z:-4,w:6,h:3.5,d:5},{x:-8,z:-4,w:5,h:4,d:6},
+      {x:7,z:3,w:5,h:3,d:4},{x:-7,z:3,w:6,h:3.5,d:5},
+    ];
+    for (const b of bBuildings) {
+      this.addBox(b.x, b.h/2, b.z, b.w, b.h, b.d, 0x9ab870);
+      this.addBox(b.x, b.h+0.12, b.z, b.w+0.2, 0.24, b.d+0.2, 0x7a9050);
+    }
+
+    const bereanData = {
+      id: 'berean', name: 'Berean Believer',
+      x: 0, z: -5,
+      bodyColor: 0x4a6a3a, accentColor: 0x7aaa60, headColor: 0xb09060,
+      dialogues: [
+        { speaker: 'Berean Believer', text: '"Every day since you spoke, we have been examining the scriptures to see if these things are true. We search them eagerly." — Acts 17:11' },
+        { speaker: 'Berean Believer', text: '"Many here have believed — Jews and Greeks both. But word has come that the Jews from Thessalonica are stirring up the crowds here too." — Acts 17:12-13' },
+      ],
+      onComplete: 'berea_done',
+    };
+    this.spawnNPC(bereanData);
+
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Berea';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 17:10-15';
+    if (this.elQuestText) this.elQuestText.textContent = 'The Bereans search the Scriptures daily';
+
+    this.showNotification('"The Bereans were more noble-minded than those in Thessalonica, for they received the word with all eagerness, examining the Scriptures daily to see if these things were so."\n— Acts 17:11');
+
+    this.showQuestPopup(
+      'Berea — Noble-Minded Believers',
+      'Many believed in Berea. But trouble is coming from Thessalonica. Paul must move on.',
+      'Acts 17:11-15'
+    );
+  },
+
+  // ── JOURNEY 2: ATHENS — AREOPAGUS SPEECH GAME ───────────
+  loadAthens() {
+    this.currentScene = 'athens';
+    this.j2Phase = 18;
+    this.athensPhase = 0;
+    this.areopagusArgIdx = 0;
+    this.areopagusSpeechDone = false;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0x8fb8d4);
+    this.scene.fog = new THREE.FogExp2(0xb0cce0, 0.015);
+    this.addSceneLights(0xd0eeff, 0xffe8c0, 50, 40, 20);
+    this.addGround(0xd0c8a8);
+
+    // Acropolis in background (geometric shapes at distance)
+    this.addBox(0, 6, -35, 24, 12, 8, 0xe0d8b8);
+    this.addBox(-5, 12, -36, 2, 0.5, 2, 0xd4cc9c);
+    this.addBox( 5, 12, -36, 2, 0.5, 2, 0xd4cc9c);
+    this.addBox( 0, 10, -36, 0.8, 8, 0.8, 0xe0d8b8);
+    this.addBox(-3, 10, -36, 0.8, 8, 0.8, 0xe0d8b8);
+    this.addBox( 3, 10, -36, 0.8, 8, 0.8, 0xe0d8b8);
+
+    // Areopagus hill: rocky terrain, stone seats in semicircle
+    this.addBox(0, 0.5, -5, 18, 1, 14, 0xc8b890);
+    for (let i = -3; i <= 3; i++) {
+      this.addBox(i*2.4, 0.5, 4, 1.8, 0.6, 1.0, 0xb8a880);
+      this.addBox(i*2.4, 1.2, 2, 1.8, 0.6, 1.0, 0xb8a880);
+    }
+
+    // Altar to Unknown God
+    this.addBox(0, 0.75, -12, 2, 1.5, 2, 0xe8e0c8);
+    this.addBox(0, 1.6, -12, 2.2, 0.2, 2.2, 0xd4cc9c);
+
+    const athensNPCs = [
+      { id: 'epicurean', name: 'Epicurean Philosopher',
+        x: -5, z: -8,
+        bodyColor: 0x5a6a3a, accentColor: 0x8a9a60, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'Epicurean Philosopher', text: '"We believe the highest good is pleasure and freedom from pain. The gods exist but do not concern themselves with human affairs. What is this \'resurrection\' you speak of?" — Acts 17:18' },
+          { speaker: 'Epicurean Philosopher', text: '"Some are saying you are a \'seed-picker\' — gathering bits of foreign ideas. What does this babbler wish to say?" — Acts 17:18' },
+        ],
+      },
+      { id: 'stoic', name: 'Stoic Philosopher',
+        x: 5, z: -8,
+        bodyColor: 0x3a4a5a, accentColor: 0x6a7a8a, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'Stoic Philosopher', text: '"We believe the universe is governed by divine reason — the Logos. All people share in it. This \'unknown god\' you reference — tell us more."' },
+          { speaker: 'Stoic Philosopher', text: '"Could your God be the Logos? The reason behind all things?"' },
+        ],
+      },
+      { id: 'altar_npc', name: 'The Altar',
+        x: 0, z: -12,
+        bodyColor: 0xe8e0c8, accentColor: 0xd4cc9c, headColor: 0xe8e0c8,
+        dialogues: [
+          { speaker: 'The Altar', text: '"The altar reads: TO AN UNKNOWN GOD — Paul saw it and knew — this was his opening." — Acts 17:23' },
+        ],
+        onComplete: 'altar_seen',
+      },
+    ];
+
+    for (const npc of athensNPCs) this.spawnNPC(npc);
+
+    this.player.pos.set(0, 0, 8);
+    this.playerGroup.position.set(0, 0, 8);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 20);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Athens — The Areopagus';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 17:16-34';
+    if (this.elQuestText) this.elQuestText.textContent = 'Speak with the philosophers — find the altar';
+
+    this.showNotification('"While Paul waited in Athens, his spirit was provoked within him as he saw that the city was full of idols."\n— Acts 17:16');
+
+    this.showQuestPopup(
+      'Athens — City of Idols',
+      'Paul reasoned in the synagogue and in the agora daily. Epicurean and Stoic philosophers brought him to the Areopagus.',
+      'Acts 17:17-19'
+    );
+  },
+
+  startAreopagusSpeech() {
+    this.areopagusSpeechDone = false;
+    this.dialogueActive = true;
+    let speechScore = 0;
+
+    const rounds = [
+      {
+        question: 'How do you introduce the Unknown God to the Athenians?',
+        options: [
+          { text: '"What you worship as unknown, this I proclaim to you." — Acts 17:23', correct: true },
+          { text: '"Your gods are false. The Unknown God is the only true one."', correct: false },
+          { text: '"I found your altar interesting. Can you tell me about it?"', correct: false },
+        ],
+      },
+      {
+        question: 'The Stoics say God lives in temples — how do you respond?',
+        options: [
+          { text: '"The God who made the world does not live in temples made by man, nor is he served by human hands, as though he needed anything." — Acts 17:24-25', correct: true },
+          { text: '"You should build a better temple to him."', correct: false },
+          { text: '"The Temple in Jerusalem is his true home."', correct: false },
+        ],
+      },
+      {
+        question: 'The Epicureans say the gods are distant — prove God is near:',
+        options: [
+          { text: '"He made every nation from one man, that they should seek God and perhaps feel their way toward him — yet he is not far from each one of us. In him we live and move and have our being." — Acts 17:26-28', correct: true },
+          { text: '"God is far from sinners — only the righteous find him."', correct: false },
+          { text: '"God speaks only through the Jewish prophets."', correct: false },
+        ],
+      },
+      {
+        question: 'Quote their own poets to make your point about God:',
+        options: [
+          { text: '"As even some of your own poets have said: \'For we are indeed his offspring.\'" — Acts 17:28 (Aratus)', correct: true },
+          { text: '"Your poets have nothing useful to say about God."', correct: false },
+          { text: '"Homer wrote many things about the divine."', correct: false },
+        ],
+      },
+      {
+        question: 'How do you close — the resurrection and judgment?',
+        options: [
+          { text: '"He has fixed a day on which he will judge the world by a man he has appointed — and of this he has given assurance to all by raising him from the dead." — Acts 17:31', correct: true },
+          { text: '"Believe now or face punishment immediately."', correct: false },
+          { text: '"The resurrection is a spiritual concept, not a physical one."', correct: false },
+        ],
+      },
+    ];
+
+    const container = document.getElementById('sermon-game');
+    const questionEl = document.getElementById('sermon-question');
+    const optionsEl  = document.getElementById('sermon-options');
+    const scoreEl    = document.getElementById('sermon-score-bar');
+
+    if (!container) {
+      this.areopagusSpeechDone = true;
+      speechScore = 5;
+      this._areopagusSpeechResult(speechScore);
+      return;
+    }
+
+    container.classList.remove('hidden');
+    if (scoreEl) scoreEl.textContent = 'Arguments: 0/5';
+
+    const showRound = (idx) => {
+      if (idx >= rounds.length) {
+        container.classList.add('hidden');
+        this.dialogueActive = false;
+        this.areopagusSpeechDone = true;
+        this._areopagusSpeechResult(speechScore);
+        return;
+      }
+      const round = rounds[idx];
+      if (questionEl) questionEl.textContent = round.question;
+      if (optionsEl) optionsEl.innerHTML = '';
+      if (scoreEl) scoreEl.textContent = 'Arguments: ' + speechScore + '/5';
+
+      const shuffled = [...round.options].sort(() => Math.random() - 0.5);
+      for (const opt of shuffled) {
+        const btn = document.createElement('button');
+        btn.className = 'sermon-option';
+        btn.textContent = opt.text;
+        btn.addEventListener('click', () => {
+          if (opt.correct) {
+            speechScore++;
+            btn.classList.add('sermon-correct');
+            const fb = document.createElement('div');
+            fb.className = 'sermon-feedback sermon-right';
+            fb.textContent = 'Correct! Paul\'s argument lands.';
+            if (optionsEl) optionsEl.appendChild(fb);
+          } else {
+            btn.classList.add('sermon-wrong');
+            const fb = document.createElement('div');
+            fb.className = 'sermon-feedback sermon-missed';
+            fb.textContent = 'The philosophers raise an eyebrow. Not quite.';
+            if (optionsEl) optionsEl.appendChild(fb);
+          }
+          if (optionsEl) {
+            for (const b of optionsEl.querySelectorAll('.sermon-option')) b.disabled = true;
+          }
+          setTimeout(() => { showRound(idx + 1); }, 1600);
+        });
+        if (optionsEl) optionsEl.appendChild(btn);
+      }
+    };
+
+    showRound(0);
+  },
+
+  _areopagusSpeechResult(score) {
+    let resultText;
+    if (score >= 5) {
+      resultText = '"Dionysius the Areopagite and Damaris and others believed." — Acts 17:34';
+    } else if (score >= 3) {
+      resultText = 'Some mocked; some said "We will hear you again"; some believed. — Acts 17:32-34';
+    } else {
+      resultText = 'At the word of resurrection, some mocked. But the seed was planted. — Acts 17:32';
+    }
+
+    this.showQuestPopup(
+      'The Areopagus — Athens',
+      resultText + '\n\nAthens was not a great harvest — but a seed was planted. Dionysius and Damaris believed.',
+      'Acts 17:34'
+    );
+    const db = document.getElementById('qp-dismiss');
+    if (db) db.onclick = () => {
+      document.getElementById('quest-popup').classList.add('hidden');
+      this.dialogueActive = false;
+      setTimeout(() => this.loadCorinth(), 3000);
+    };
+  },
+
+  // ── JOURNEY 2: CORINTH ───────────────────────────────────
+  loadCorinth() {
+    this.currentScene = 'corinth';
+    this.j2Phase = 19;
+    this.corinthPhase = 0;
+    this.j2CorinthEarnings = 0;
+    this.aquilaMetPrisca = false;
+    this.crispusConverted = false;
+    this.gallioTrial = false;
+    this.teardownScene();
+
+    this.scene.background = new THREE.Color(0x9ab4c8);
+    this.scene.fog = new THREE.FogExp2(0xd8c8b0, 0.018);
+    this.addSceneLights(0xd0e8f8, 0xffe8b0, 50, 40, 30);
+    this.addGround(0xc8b890);
+
+    // City: Roman columns and market
+    // Tentmaker workshop (west)
+    this.addBox(-10, 1.5, 5, 8, 3, 7, 0xd4bc88);
+    this.addBox(-10, 3.15, 5, 8.2, 0.3, 7.2, 0xb09050);
+    this.addBox(-10, 0.8, 5, 3, 0.4, 5, 0x7a5a30); // loom/workbench
+
+    // Synagogue (east)
+    this.addBox(10, 2.5, -4, 9, 5, 8, 0xe0d0a0);
+    this.addBox(10, 5.15, -4, 9.2, 0.3, 8.2, 0xc0a870);
+    // Columns
+    for (let ci = -3; ci <= 3; ci += 3) {
+      this.addBox(ci*1.4+10, 4.5, -8, 0.6, 9, 0.6, 0xe8e0c8);
+    }
+
+    // Judgment seat / bema (center north)
+    this.addBox(0, 1.0, -15, 10, 2, 6, 0xd8c8a0);
+    this.addBox(0, 2.15, -15, 10.2, 0.3, 6.2, 0xc0b090);
+    this.addBox(0, 3.5, -15, 8, 3, 0.5, 0xd0c090);
+    // Bema steps
+    this.addBox(0, 0.3, -11.5, 10, 0.6, 1.5, 0xc8b880);
+    this.addBox(0, 0.6, -12.5, 10, 0.6, 1.0, 0xc8b880);
+
+    // Harbor in distance
+    this.addBox(25, 0.2, -20, 20, 0.4, 30, 0x2a6080);
+
+    // Market stalls (center)
+    for (let si = -2; si <= 2; si++) {
+      this.addBox(si*4, 1.0, 10, 3, 0.1, 2.0, 0x9a7040);
+      this.addBox(si*4, 2.1, 10, 3.5, 0.12, 2.2, [0xcc6030,0x408040,0x4040a0,0x903060,0xc09020][si+2]);
+    }
+
+    const corinthNPCs = [
+      { id: 'aquila', name: 'Aquila',
+        x: -6, z: 5,
+        bodyColor: 0x5a4a2a, accentColor: 0x9a8050, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'Aquila', text: '"I am Aquila, from Pontus. Claudius expelled all Jews from Rome — some disagreement over \'Chrestus,\' the emperor called it. We had to leave everything." — Acts 18:2' },
+          { speaker: 'Aquila', text: '"My wife Priscilla and I set up our workshop here. We make tents — cilicium goat-hair cloth, the same as your homeland. You need work? You can work alongside us." — Acts 18:3' },
+        ],
+        onComplete: 'aquila_met',
+      },
+      { id: 'priscilla', name: 'Priscilla',
+        x: -4, z: 5,
+        bodyColor: 0x9a5a4a, accentColor: 0xc09070, headColor: 0xb08060,
+        dialogues: [
+          { speaker: 'Priscilla', text: '"Welcome to Corinth, Paul. This city has two harbors — Lechaion to the west, Cenchreae to the east. Merchants from everywhere pass through." — Acts 18:2' },
+          { speaker: 'Priscilla', text: '"Aquila tells me you are a tentmaker from Tarsus — the finest cilicium cloth in the world comes from there. Let us work together." — Acts 18:3' },
+        ],
+        onComplete: 'priscilla_met',
+      },
+      { id: 'crispus', name: 'Crispus',
+        x: 5, z: -8,
+        bodyColor: 0x4a3a2a, accentColor: 0x8a6a40, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'Crispus', text: '"I am Crispus, ruler of the synagogue here. Visitors are always welcome to speak. I have heard your message, Paul — I believe it. Jesus IS the Messiah." — Acts 18:8' },
+          { speaker: 'Crispus', text: '"I want to be baptized — and my household. This is the truth I have been waiting for." — Acts 18:8' },
+        ],
+        onComplete: 'crispus_believes',
+      },
+      { id: 'sosthenes', name: 'Sosthenes',
+        x: 7, z: -8,
+        bodyColor: 0x6a3a2a, accentColor: 0xaa5a40, headColor: 0xb08860,
+        dialogues: [
+          { speaker: 'Sosthenes', text: '"I am Sosthenes. Some of us are not pleased with what Crispus has done — joining with Paul. The synagogue should bring charges against him before Gallio." — Acts 18:12' },
+        ],
+      },
+      { id: 'gallio', name: 'Gallio',
+        x: 0, z: -15,
+        bodyColor: 0x4a5a6a, accentColor: 0x8090a0, headColor: 0xb09060,
+        dialogues: [
+          { speaker: 'Gallio', text: '"I am Gallio, proconsul of Achaia. You Jews — you have brought this man before me. If it were a matter of wrongdoing or crime, I would hear you. But since it is a dispute about words and names and your own law, settle it yourselves. I refuse to be a judge of these things." — Acts 18:14-15' },
+          { speaker: 'Gallio', text: '"I have driven them away from my judgment seat. This matter is closed." — Acts 18:16' },
+        ],
+        onComplete: 'gallio_dismisses',
+      },
+    ];
+
+    for (const npc of corinthNPCs) this.spawnNPC(npc);
+
+    this.player.pos.set(0, 0, 18);
+    this.playerGroup.position.set(0, 0, 18);
+    this.playerGroup.rotation.y = Math.PI;
+    this.cam.pos.set(0, 9, 30);
+
+    this.showRPGHud();
+    document.getElementById('location-name').textContent = 'Corinth';
+    if (this.elScriptureRef) this.elScriptureRef.textContent = 'Acts 18:1-18';
+    if (this.elQuestText) this.elQuestText.textContent = 'Meet Aquila and Priscilla — begin tentmaking';
+
+    this.showQuestPopup(
+      'Corinth — Eighteen Months',
+      'Paul arrived in Corinth and found Aquila and Priscilla. He worked with them as a tentmaker while reasoning in the synagogue every Sabbath.',
+      'Acts 18:1-4'
+    );
+  },
+
+  _startCorinthTentGame() {
+    // Corinth tentmaking mini-game (denarii currency)
+    this.minigameActive = true;
+    this.dialogueActive = true;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'corinth-tent-game';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:60;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
+
+    const title = document.createElement('div');
+    title.textContent = 'Corinth Tentmaking Workshop';
+    title.style.cssText = 'font-family:Cinzel,serif;color:#c9a84c;font-size:1.4rem;font-weight:700;letter-spacing:0.1em;';
+    overlay.appendChild(title);
+
+    const desc = document.createElement('div');
+    desc.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f0e0b0;font-size:0.95rem;max-width:380px;text-align:center;line-height:1.7;';
+    desc.textContent = '"He was of the same trade... and he worked with them, for they were tentmakers by trade." — Acts 18:3';
+    overlay.appendChild(desc);
+
+    const status = document.createElement('div');
+    status.style.cssText = 'font-family:Cinzel,serif;color:#a0b870;font-size:1rem;letter-spacing:0.05em;';
+    const updateStatus = () => {
+      status.textContent = 'Denarii: ' + this.inventory.denarii + ' | Cloth: ' + this.inventory.tentCloth + ' | Tents: ' + this.inventory.tents + ' | Goal: 20 denarii';
+    };
+    updateStatus();
+    overlay.appendChild(status);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:14px;flex-wrap:wrap;justify-content:center;';
+
+    const mkBtn = (label, color, action) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'padding:10px 20px;border-radius:8px;background:' + color + ';border:1.5px solid rgba(255,255,255,0.3);color:#f5ecd0;font-family:Cinzel,serif;font-size:0.85rem;cursor:pointer;';
+      b.addEventListener('click', action);
+      b.addEventListener('touchstart', (e) => { e.preventDefault(); action(); }, { passive: false });
+      return b;
+    };
+
+    btnRow.appendChild(mkBtn('Buy Cloth (3 denarii)', 'rgba(60,100,180,0.5)', () => {
+      if (this.inventory.denarii >= 3) {
+        this.inventory.denarii -= 3;
+        this.inventory.tentCloth++;
+        updateStatus();
+        feedback.textContent = 'Cloth purchased! Weave it into a tent.';
+      } else {
+        feedback.textContent = 'Need 3 denarii to buy cloth.';
+      }
+    }));
+
+    btnRow.appendChild(mkBtn('Weave Tent', 'rgba(100,140,60,0.5)', () => {
+      if (this.inventory.tentCloth > 0) {
+        this.inventory.tentCloth--;
+        this.inventory.tents++;
+        updateStatus();
+        feedback.textContent = 'Tent crafted! Sell it in the market.';
+      } else {
+        feedback.textContent = 'Buy cloth first.';
+      }
+    }));
+
+    btnRow.appendChild(mkBtn('Sell Tent (8 denarii)', 'rgba(160,100,40,0.5)', () => {
+      if (this.inventory.tents > 0) {
+        this.inventory.tents--;
+        this.inventory.denarii += 8;
+        this.j2CorinthEarnings += 8;
+        updateStatus();
+        if (this.j2CorinthEarnings >= 20) {
+          feedback.textContent = '20 denarii earned! The mission is supported.';
+          setTimeout(() => {
+            overlay.remove();
+            this.minigameActive = false;
+            this.dialogueActive = false;
+            this.corinthPhase = 1;
+            this._showCorinthVision();
+          }, 1500);
+        } else {
+          feedback.textContent = 'Tent sold for 8 denarii! Keep going.';
+        }
+      } else {
+        feedback.textContent = 'Weave a tent first.';
+      }
+    }));
+
+    // Provide some starting denarii from Silas/Timothy arrival
+    btnRow.appendChild(mkBtn('Silas Arrives! (+20 denarii)', 'rgba(100,60,140,0.5)', () => {
+      this.inventory.denarii += 20;
+      this.j2CorinthEarnings += 20;
+      updateStatus();
+      feedback.textContent = '"Silas and Timothy arrived from Macedonia — bringing support." — Acts 18:5';
+      if (this.j2CorinthEarnings >= 20) {
+        setTimeout(() => {
+          overlay.remove();
+          this.minigameActive = false;
+          this.dialogueActive = false;
+          this.corinthPhase = 1;
+          this._showCorinthVision();
+        }, 1500);
+      }
+    }));
+
+    overlay.appendChild(btnRow);
+
+    const feedback = document.createElement('div');
+    feedback.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8b070;font-size:0.9rem;min-height:1.4em;';
+    overlay.appendChild(feedback);
+
+    document.body.appendChild(overlay);
+  },
+
+  _showCorinthVision() {
+    const vOv = document.createElement('div');
+    vOv.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;padding:40px;pointer-events:none;';
+    const vTxt = document.createElement('div');
+    vTxt.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8d8ff;font-size:clamp(0.9rem,2.5vw,1.1rem);line-height:1.9;max-width:460px;text-align:center;';
+    vTxt.innerHTML = '"Do not be afraid; keep on speaking, do not be silent. For I am with you, and no one is going to attack and harm you, because I have many people in this city." — Acts 18:9-10';
+    vOv.appendChild(vTxt);
+    document.body.appendChild(vOv);
+    setTimeout(() => {
+      vOv.remove();
+      this.showQuestPopup(
+        'The Lord\'s Vision in Corinth',
+        'Paul stayed in Corinth eighteen months — longer than anywhere before. The church grew strong.',
+        'Acts 18:11'
+      );
+      const db = document.getElementById('qp-dismiss');
+      if (db) db.onclick = () => {
+        document.getElementById('quest-popup').classList.add('hidden');
+        this.dialogueActive = false;
+        if (this.elQuestText) this.elQuestText.textContent = 'Speak to Crispus at the synagogue — then face Gallio';
+      };
+    }, 5000);
+  },
+
+  // ── JOURNEY 2: COMPLETE ──────────────────────────────────
+  showJourney2Complete() {
+    this.j2Complete = true;
+    this.j2Phase = 20;
+    this.dialogueActive = true;
+    this.inventory.shekels += 700;
+
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:#080500;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;overflow-y:auto;';
+
+    const t1 = document.createElement('div');
+    t1.textContent = "Journey 2 Complete";
+    t1.style.cssText = 'color:#c9a84c;font-size:clamp(1.8rem,5vw,2.8rem);font-weight:700;letter-spacing:0.15em;margin-bottom:6px;';
+    ov.appendChild(t1);
+
+    const t2 = document.createElement('div');
+    t2.textContent = 'Acts 15\u201318 — The Second Missionary Journey';
+    t2.style.cssText = 'color:#9a8050;font-size:clamp(0.8rem,2vw,1rem);letter-spacing:0.18em;margin-bottom:22px;';
+    ov.appendChild(t2);
+
+    const cities = [
+      '⚖️  Jerusalem — The Council', '🌿  Lystra — Timothy Joins',
+      '🌊  Troas — The Macedonian Call', '💜  Philippi — Lydia & the Jailer',
+      '🏛️  Thessalonica — World Upside Down', '📜  Berea — Noble Searchers of Scripture',
+      '🏺  Athens — The Areopagus', '🏗️  Corinth — Eighteen Months',
+    ];
+    const cityList = document.createElement('div');
+    cityList.style.cssText = 'font-family:Crimson Text,Georgia,serif;color:#c8b880;font-size:clamp(0.85rem,2.2vw,1rem);line-height:2.1;margin-bottom:22px;';
+    cityList.innerHTML = cities.join('<br>');
+    ov.appendChild(cityList);
+
+    const verse = document.createElement('div');
+    verse.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#d4c890;font-size:clamp(0.9rem,2.5vw,1.1rem);max-width:420px;line-height:1.9;margin-bottom:18px;';
+    verse.innerHTML = '"I planted, Apollos watered, but God gave the growth." — 1 Cor 3:6';
+    ov.appendChild(verse);
+
+    const reward = document.createElement('div');
+    reward.textContent = '+700 shekels earned';
+    reward.style.cssText = 'color:#a0e0a0;font-size:1rem;letter-spacing:0.08em;margin-bottom:24px;';
+    ov.appendChild(reward);
+
+    const contBtn = document.createElement('button');
+    contBtn.textContent = 'Continue to Journey 3';
+    contBtn.style.cssText = 'padding:14px 32px;background:rgba(201,168,76,0.18);border:2px solid #c9a84c;color:#c9a84c;font-family:Cinzel,serif;font-size:0.95rem;letter-spacing:0.1em;cursor:pointer;border-radius:8px;margin-top:8px;';
+    ov.appendChild(contBtn);
+
+    document.body.appendChild(ov);
+
+    const doNext = () => { ov.remove(); this.dialogueActive = false; this.loadJourney3Stub(); };
+    contBtn.addEventListener('click', doNext);
+    contBtn.addEventListener('touchstart', (e) => { e.preventDefault(); doNext(); }, { passive: false });
+  },
+
+  // ── JOURNEY 3 STUB ───────────────────────────────────────
+  loadJourney3Stub() {
     this.dialogueActive = true;
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:#080500;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Cinzel,serif;text-align:center;padding:40px;';
-    document.body.appendChild(ov);
 
     const t1 = document.createElement('div');
-    t1.textContent = "Paul\u2019s Journeys";
+    t1.textContent = "Journey 3: Ephesus";
     t1.style.cssText = 'color:#c9a84c;font-size:clamp(2rem,6vw,3rem);font-weight:700;letter-spacing:0.15em;margin-bottom:10px;';
     ov.appendChild(t1);
 
     const t2 = document.createElement('div');
-    t2.textContent = 'Second Journey — The Jerusalem Council';
+    t2.textContent = 'The Riot of the Silversmiths';
     t2.style.cssText = 'color:#9a8050;font-size:clamp(0.85rem,2.2vw,1.1rem);letter-spacing:0.18em;margin-bottom:30px;';
     ov.appendChild(t2);
 
     const soon = document.createElement('div');
     soon.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#c8b880;font-size:clamp(1rem,2.5vw,1.2rem);max-width:440px;line-height:1.9;margin-bottom:30px;';
-    soon.innerHTML = '"It seemed good to the Holy Spirit and to us to lay on you no greater burden than these requirements..." — Acts 15:28<br><br><em>Coming Soon</em>';
+    soon.innerHTML = '"So the word of the Lord continued to increase and prevail mightily." — Acts 19:20<br><br><em>Coming Soon</em>';
     ov.appendChild(soon);
 
     const backBtn = document.createElement('button');
-    backBtn.textContent = 'Play Again from Jerusalem';
+    backBtn.textContent = 'Play from Beginning';
     backBtn.style.cssText = 'padding:12px 28px;background:rgba(201,168,76,0.15);border:2px solid #c9a84c;color:#c9a84c;font-family:Cinzel,serif;font-size:0.9rem;letter-spacing:0.1em;cursor:pointer;border-radius:8px;margin-top:8px;';
     ov.appendChild(backBtn);
 
-    backBtn.addEventListener('click', () => {
-      location.reload();
-    });
-    backBtn.addEventListener('touchstart', (e) => { e.preventDefault(); location.reload(); }, { passive: false });
+    document.body.appendChild(ov);
+
+    const doRestart = () => { location.reload(); };
+    backBtn.addEventListener('click', doRestart);
+    backBtn.addEventListener('touchstart', (e) => { e.preventDefault(); doRestart(); }, { passive: false });
   },
 
   // ═══════════════════════════════════════
@@ -6404,6 +7562,186 @@ const Game = {
           }, 2000);
         }
       );
+    }
+  },
+
+  // ═══════════════════════════════════════
+  //  ENDIALOG CALLBACKS FOR JOURNEY 2
+  // ═══════════════════════════════════════
+  _handleJ2DialogueComplete(cb, nid) {
+    if (cb === 'council_npc_met') {
+      if (!this.j2CouncilNPCsMet[nid]) {
+        this.j2CouncilNPCsMet[nid] = true;
+        this.j2CouncilMetCount++;
+        this.showNotification('Council member heard: ' + this.j2CouncilMetCount + '/3\n(Peter, James, Pharisee Believer)');
+        if (this.j2CouncilMetCount >= 3) {
+          // Trigger the council vote choice
+          setTimeout(() => {
+            this.showChoice(
+              'James asks for the council\'s decision on Gentile believers. What do you affirm?\n\nA) "Gentiles must be circumcised and follow all of Moses\' law"\nB) "Gentiles are free — grace alone, no restrictions"\nC) "Abstain from idols, sexual immorality, strangled meat, and blood — freedom in Christ with these guidelines" (Acts 15:29)',
+              'C — The council\'s ruling (Acts 15:29)',
+              'Review the council again',
+              () => {
+                const ov = document.createElement('div');
+                ov.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;padding:40px;pointer-events:none;';
+                const txt = document.createElement('div');
+                txt.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f5ecd0;font-size:clamp(0.9rem,2.5vw,1.1rem);line-height:1.9;max-width:460px;text-align:center;';
+                txt.innerHTML = 'The council affirms James\'s ruling.<br><br>"It seemed good to the Holy Spirit and to us to lay on you no greater burden than these requirements." — Acts 15:28<br><br><em>Now speak with Silas before you depart.</em>';
+                ov.appendChild(txt);
+                document.body.appendChild(ov);
+                setTimeout(() => { ov.remove(); this.councilComplete = true; }, 4000);
+              },
+              () => {
+                this.showNotification('The council has spoken — speak with Silas when ready.');
+              }
+            );
+          }, 1000);
+        }
+      }
+
+    } else if (cb === 'council_silas_met') {
+      this.silasJoined = true;
+      this.showNotification('Silas joins Paul!\nNow the letter will go to the churches.');
+      setTimeout(() => {
+        // Paul/Barnabas split
+        const splitOv = document.createElement('div');
+        splitOv.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;padding:40px;pointer-events:none;';
+        const splitTxt = document.createElement('div');
+        splitTxt.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f5ecd0;font-size:clamp(0.9rem,2.5vw,1.1rem);line-height:1.9;max-width:460px;text-align:center;';
+        splitTxt.innerHTML = 'Barnabas: "I want to give John Mark another chance."<br><br>Paul: "He abandoned us at Perga. I will not take him again."<br><br>"There arose a sharp disagreement, so that they separated from each other." — Acts 15:39<br><br><em>Barnabas and Mark sailed to Cyprus. Paul chose Silas.</em>';
+        splitOv.appendChild(splitTxt);
+        document.body.appendChild(splitOv);
+        setTimeout(() => {
+          splitOv.remove();
+          this.showQuestPopup(
+            'Paul Chose Silas — Acts 15:40-41',
+            'Paul chose Silas and set out through Syria and Cilicia, strengthening the churches.',
+            'Acts 15:40-41'
+          );
+          const db = document.getElementById('qp-dismiss');
+          if (db) db.onclick = () => {
+            document.getElementById('quest-popup').classList.add('hidden');
+            this.dialogueActive = false;
+            setTimeout(() => this.loadTimothyRecruit(), 3000);
+          };
+        }, 5000);
+      }, 1500);
+
+    } else if (cb === 'timothy_joins') {
+      this.timothyJoined = true;
+      this.showNotification('Timothy joined Paul and Silas!\n"He was well spoken of by the believers at Lystra and Iconium." — Acts 16:2');
+      setTimeout(() => {
+        this.showQuestPopup(
+          'Timothy Joins the Mission — Acts 16:1-5',
+          'Timothy joined Paul and Silas. He was well spoken of by the believers at Lystra and Iconium. They delivered the council\'s decisions to the churches.',
+          'Acts 16:2-5'
+        );
+        const db = document.getElementById('qp-dismiss');
+        if (db) db.onclick = () => {
+          document.getElementById('quest-popup').classList.add('hidden');
+          this.dialogueActive = false;
+          setTimeout(() => this.loadTroas(), 4000);
+        };
+      }, 1500);
+
+    } else if (cb === 'lydia_believes') {
+      this.lydiaConverted = true;
+      this.showNotification('"The Lord opened her heart to pay attention to what was said by Paul." — Acts 16:14\nLydia and her household were baptized!');
+      setTimeout(() => this._buildPhilippiPhase1(), 2500);
+
+    } else if (cb === 'jailer_saved') {
+      this.jailerConverted = true;
+      const jailerOv = document.createElement('div');
+      jailerOv.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;padding:40px;pointer-events:none;';
+      const jailerTxt = document.createElement('div');
+      jailerTxt.style.cssText = 'font-family:Crimson Text,Georgia,serif;font-style:italic;color:#f5ecd0;font-size:clamp(0.9rem,2.5vw,1.1rem);line-height:1.9;max-width:460px;text-align:center;';
+      jailerTxt.innerHTML = '"Believe in the Lord Jesus, and you will be saved, you and your household." — Acts 16:31<br><br>"He took them and washed their wounds; and he was baptized at once, he and all his family. Then he brought them up into his house and set food before them." — Acts 16:33-34';
+      jailerOv.appendChild(jailerTxt);
+      document.body.appendChild(jailerOv);
+      setTimeout(() => {
+        jailerOv.remove();
+        this.showNotification('"We are Roman citizens! You beat us publicly without trial and threw us in prison. Now you want to secretly let us go? No!" — Acts 16:37\nOfficials come to apologize.');
+        setTimeout(() => {
+          this.showQuestPopup(
+            'The Church at Philippi — Phil 1:3-5',
+            'The church at Philippi was born — meeting in Lydia\'s home. Paul left, but the church remained strong.',
+            'Phil 1:3-5'
+          );
+          const db = document.getElementById('qp-dismiss');
+          if (db) db.onclick = () => {
+            document.getElementById('quest-popup').classList.add('hidden');
+            this.dialogueActive = false;
+            setTimeout(() => this.loadThessalonica(), 3000);
+          };
+        }, 3500);
+      }, 5000);
+
+    } else if (cb === 'thessalonica_done') {
+      this.showQuestPopup(
+        'Thessalonica — Acts 17:2-4',
+        'Paul spent three Sabbaths in Thessalonica. Many believed — especially devout Greeks and prominent women. But trouble forced him to leave by night.',
+        'Acts 17:2-4'
+      );
+      const db = document.getElementById('qp-dismiss');
+      if (db) db.onclick = () => {
+        document.getElementById('quest-popup').classList.add('hidden');
+        this.dialogueActive = false;
+        setTimeout(() => this.loadBerea(), 3000);
+      };
+
+    } else if (cb === 'berea_done') {
+      this.showQuestPopup(
+        'Berea — Acts 17:14-15',
+        'Paul was sent away to Athens by sea. Silas and Timothy stayed in Berea.',
+        'Acts 17:14-15'
+      );
+      const db = document.getElementById('qp-dismiss');
+      if (db) db.onclick = () => {
+        document.getElementById('quest-popup').classList.add('hidden');
+        this.dialogueActive = false;
+        setTimeout(() => this.loadAthens(), 3000);
+      };
+
+    } else if (cb === 'altar_seen') {
+      this.showNotification('Paul saw the altar — "TO AN UNKNOWN GOD"\nHe will address the Areopagus now.');
+      setTimeout(() => this.startAreopagusSpeech(), 2000);
+
+    } else if (cb === 'aquila_met') {
+      this.aquilaMetPrisca = true;
+      this.showNotification('Aquila and Priscilla welcomed Paul!\nHe lived and worked with them. — Acts 18:3');
+      setTimeout(() => {
+        if (this.corinthPhase === 0) {
+          this._startCorinthTentGame();
+        }
+      }, 2000);
+
+    } else if (cb === 'priscilla_met') {
+      this.showNotification('Priscilla: "Let us work together in the workshop." — Acts 18:3');
+
+    } else if (cb === 'crispus_believes') {
+      this.crispusConverted = true;
+      this.showNotification('"Crispus, the ruler of the synagogue, believed in the Lord, together with his entire household." — Acts 18:8\nNow Sosthenes plots against Paul.');
+      if (this.elQuestText) this.elQuestText.textContent = 'Go to the bema — Gallio awaits';
+
+    } else if (cb === 'gallio_dismisses') {
+      this.gallioTrial = true;
+      this.showNotification('"Gallio refused to hear the case — Paul was protected by Roman law."\nGallio Inscription: Archaeologists dated his term to 51-52 AD — one of the most precise dates in NT history.');
+      setTimeout(() => {
+        this.showNotification('Sosthenes, the new synagogue ruler, was beaten before the judgment seat. Gallio paid no attention. — Acts 18:17');
+        setTimeout(() => {
+          this.showQuestPopup(
+            'Corinth Complete — Acts 18:18',
+            'After 18 months, Paul\'s time in Corinth was complete. He departed for Jerusalem with Aquila and Priscilla.',
+            'Acts 18:18'
+          );
+          const db = document.getElementById('qp-dismiss');
+          if (db) db.onclick = () => {
+            document.getElementById('quest-popup').classList.add('hidden');
+            this.dialogueActive = false;
+            setTimeout(() => this.showJourney2Complete(), 2000);
+          };
+        }, 3500);
+      }, 2000);
     }
   },
 
